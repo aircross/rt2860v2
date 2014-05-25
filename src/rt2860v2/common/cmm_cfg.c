@@ -825,7 +825,7 @@ INT RtmpIoctl_rt_ioctl_giwname(
 		}
 		else
 #endif /* P2P_SUPPORT */
-		strcpy(pData, "RTWIFI SoftAP");
+		strcpy(pData, "Ralink RT2860v2 SoftAP");
 	}
 
 	return NDIS_STATUS_SUCCESS;

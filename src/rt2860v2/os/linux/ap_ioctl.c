@@ -254,7 +254,7 @@ INT rt28xx_ap_ioctl(
 			}
 			break;
 		case SIOCGIWMODE:  /*get operation mode */
-			wrqin->u.mode = IW_MODE_INFRA;   /*SoftAP always on INFRA mode. */
+			wrqin->u.mode = IW_MODE_MASTER;   /*SoftAP always on MASTER mode. */
 			break;
 		case SIOCSIWAP:  /*set access point MAC addresses */
 		case SIOCSIWMODE:  /*set operation mode */
