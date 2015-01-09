@@ -277,7 +277,7 @@ USHORT RtmpPCI_WriteMultiTxResource(
 
 	pTxD->SDPtr0 = BufBasePaLow;
 	pTxD->SDLen0 = firstDMALen; /* include padding*/
-	pTxD->SDPtr1 = PCI_MAP_SINGLE(pAd, pTxBlk, 0, 1, RTMP_PCI_DMA_TODEVICE);;
+	pTxD->SDPtr1 = PCI_MAP_SINGLE(pAd, pTxBlk, 0, 1, RTMP_PCI_DMA_TODEVICE);
 	pTxD->SDLen1 = pTxBlk->SrcBufLen;
 	pTxD->LastSec0 = !(pTxD->SDLen1);
 	pTxD->LastSec1 = (bIsLast && pTxD->SDLen1) ? 1 : 0;
@@ -1118,12 +1118,14 @@ VOID	RTMPHandleTBTTInterrupt(
 		RTMP_OS_TASKLET_SCHE(&pObj->tbtt_task);
 #endif /* WORKQUEUE_BH */
 
+#ifdef A_BAND_SUPPORT
 		if ((pAd->CommonCfg.Channel > 14)
 			&& (pAd->CommonCfg.bIEEE80211H == 1)
 			&& (pAd->Dot11_H.RDMode == RD_SWITCHING_MODE))
 		{
 			ChannelSwitchingCountDownProc(pAd);
 		}
+#endif
 	}
 	else
 #endif /* CONFIG_AP_SUPPORT */

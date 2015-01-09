@@ -52,8 +52,6 @@ int ra_mtd_write_nm(char *name, loff_t to, size_t len, const u_char *buf)
 	struct mtd_info *mtd;
 	struct erase_info ei;
 	u_char *bak = NULL;
-        DECLARE_WAITQUEUE(wait, current);                                                                                                   
-        wait_queue_head_t wait_q;
 
 	mtd = get_mtd_device_nm(name);
 
@@ -75,22 +73,17 @@ int ra_mtd_write_nm(char *name, loff_t to, size_t len, const u_char *buf)
 		goto out;
 	}
 
-        set_current_state(TASK_INTERRUPTIBLE);
-        add_wait_queue(&wait_q, &wait);
-
-	ret = mtd->_read(mtd, 0, mtd->erasesize, &rdlen, bak);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,4,0)
+	ret = mtd_read(mtd, 0, mtd->erasesize, &rdlen, bak);
+#else
+	ret = mtd->read(mtd, 0, mtd->erasesize, &rdlen, bak);
+#endif
 	if (ret) {
-                set_current_state(TASK_RUNNING);
-                remove_wait_queue(&wait_q, &wait);
-		put_mtd_device(mtd);
 		goto free_out;
 	}
 
-        schedule();  /* Wait for write to finish. */                                                                                
-        remove_wait_queue(&wait_q, &wait);                                                                                          
-
 	if (rdlen != mtd->erasesize)
-		printk("warning: ra_mtd_write: rdlen is not equal to erasesize\n");
+		printk("warning: ra_mtd_write_nm: rdlen is not equal to erasesize\n");
 
 	memcpy(bak + to, buf, len);
 
@@ -99,26 +92,29 @@ int ra_mtd_write_nm(char *name, loff_t to, size_t len, const u_char *buf)
 	ei.addr = 0;
 	ei.len = mtd->erasesize;
 	ei.priv = 0;
-	ret = mtd->_erase(mtd, &ei);
-	if (ret != 0) {
-		put_mtd_device(mtd);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,4,0)
+	ret = mtd_erase(mtd, &ei);
+#else
+	ret = mtd->erase(mtd, &ei);
+#endif
+	if (ret != 0)
 		goto free_out;
-	}
 
-        set_current_state(TASK_INTERRUPTIBLE);
-        add_wait_queue(&wait_q, &wait);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,4,0)
+	ret = mtd_write(mtd, 0, mtd->erasesize, &wrlen, bak);
+#else
+	ret = mtd->write(mtd, 0, mtd->erasesize, &wrlen, bak);
+#endif
 
-	ret = mtd->_write(mtd, 0, mtd->erasesize, &wrlen, bak);
-
-        schedule();  /* Wait for write to finish. */                                                                                
-        remove_wait_queue(&wait_q, &wait);                                                                                          
-
-	udelay(3000); //add 3ms delay after write
-
-	put_mtd_device(mtd);
+	udelay(10); /* add delay after write */
 
 free_out:
-	kfree(bak);
+	if (mtd)
+		put_mtd_device(mtd);
+
+	if (bak)
+		kfree(bak);
 out:
 	return ret;
 }
@@ -126,18 +122,20 @@ out:
 int ra_mtd_read_nm(char *name, loff_t from, size_t len, u_char *buf)
 {
 	int ret;
-	size_t rdlen;
+	size_t rdlen = 0;
 	struct mtd_info *mtd;
 
 	mtd = get_mtd_device_nm(name);
 	if (IS_ERR(mtd))
 		return (int)mtd;
 
-	ret = mtd->_read(mtd, from, len, &rdlen, buf);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,4,0)
+	ret = mtd_read(mtd, from, len, &rdlen, buf);
+#else
+	ret = mtd->read(mtd, from, len, &rdlen, buf);
+#endif
 	if (rdlen != len)
 		printk("warning: ra_mtd_read_nm: rdlen is not equal to len\n");
-
-	udelay(1000); //add 1ms delay after read
 
 	put_mtd_device(mtd);
 	return ret;

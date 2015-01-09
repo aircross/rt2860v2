@@ -124,22 +124,22 @@ typedef struct usb_ctrlrequest devctrlrequest;
  ***********************************************************************************/
 #ifdef CONFIG_AP_SUPPORT
 #ifdef RTMP_MAC_PCI
-#define AP_PROFILE_PATH			"/etc/Wireless/RT2860AP/RT2860AP.dat"
-#define AP_RTMP_FIRMWARE_FILE_NAME "/etc/Wireless/RT2860AP/RT2860AP.bin"
-#define AP_NIC_DEVICE_NAME			"RT2860AP"
-#define AP_DRIVER_VERSION			"2.7.1.6"
+#define AP_PROFILE_PATH			"/etc/Wireless/RT2860/RT2860AP.dat"
+#define AP_RTMP_FIRMWARE_FILE_NAME	"/etc_ro/Wireless/RT2860AP.bin"
+#define AP_NIC_DEVICE_NAME		"RT2860AP"
+#define AP_DRIVER_VERSION		"2.7.2.0"
 #ifdef MULTIPLE_CARD_SUPPORT
-#define CARD_INFO_PATH			"/etc/Wireless/RT2860AP/RT2860APCard.dat"
+#define CARD_INFO_PATH			"/etc/Wireless/RT2860/RT2860APCard.dat"
 #endif /* MULTIPLE_CARD_SUPPORT */
 #endif /* RTMP_MAC_PCI */
 
 #ifdef RTMP_RBUS_SUPPORT
 /* This used for rbus-based chip, maybe we can integrate it together. */
 #ifndef P2P_SUPPORT
-#define RTMP_FIRMWARE_FILE_NAME		"/etc_ro/Wireless/RT2860AP/RT2860AP.bin"
+#define RTMP_FIRMWARE_FILE_NAME		"/etc_ro/Wireless/RT2860AP.bin"
 #define PROFILE_PATH			"/etc/Wireless/RT2860i.dat"
 #endif /* P2P_SUPPORT */
-#define AP_PROFILE_PATH_RBUS		"/etc/Wireless/RT2860/RT2860.dat"
+#define AP_PROFILE_PATH_RBUS		"/etc/Wireless/RT2860/RT2860AP.dat"
 #define RT2880_AP_DRIVER_VERSION	"1.0.0.0"
 #endif /* RTMP_RBUS_SUPPORT */
 #endif /* CONFIG_AP_SUPPORT */
@@ -147,19 +147,19 @@ typedef struct usb_ctrlrequest devctrlrequest;
 
 #ifdef CONFIG_STA_SUPPORT
 #ifdef RTMP_MAC_PCI
-#define STA_PROFILE_PATH			"/etc/Wireless/RT2860STA/RT2860STA.dat"
-#define STA_DRIVER_VERSION			"2.6.1.6"
+#define STA_PROFILE_PATH		"/etc/Wireless/RT2860/RT2860STA.dat"
+#define STA_DRIVER_VERSION		"2.6.2.0"
 #ifdef MULTIPLE_CARD_SUPPORT
-#define CARD_INFO_PATH			"/etc/Wireless/RT2860STA/RT2860STACard.dat"
+#define CARD_INFO_PATH			"/etc/Wireless/RT2860/RT2860STACard.dat"
 #endif /* MULTIPLE_CARD_SUPPORT */
 #endif /* RTMP_MAC_PCI */
 
 
 #ifdef RTMP_RBUS_SUPPORT
-#define RTMP_FIRMWARE_FILE_NAME		"/etc_ro/Wireless/RT2860STA/RT2860STA.bin"
+#define RTMP_FIRMWARE_FILE_NAME		"/etc_ro/Wireless/RT2860STA.bin"
 #define PROFILE_PATH			"/etc/Wireless/RT2860i.dat"
-#define STA_PROFILE_PATH_RBUS	"/etc/Wireless/RT2860/RT2860.dat"
-#define RT2880_STA_DRIVER_VERSION		"1.0.0.0"
+#define STA_PROFILE_PATH_RBUS		"/etc/Wireless/RT2860/RT2860STA.dat"
+#define RT2880_STA_DRIVER_VERSION	"1.0.0.0"
 #endif /* RTMP_RBUS_SUPPORT */
 
 extern	const struct iw_handler_def rt28xx_iw_handler_def;
@@ -167,7 +167,7 @@ extern	const struct iw_handler_def rt28xx_iw_handler_def;
 
 #ifdef SINGLE_SKU_V2
 #ifdef RTMP_RBUS_SUPPORT
-#define SINGLE_SKU_TABLE_FILE_NAME	"/etc_ro/Wireless/RT2860AP/SingleSKU.dat"
+#define SINGLE_SKU_TABLE_FILE_NAME	"/etc/Wireless/RT2860/SingleSKU.dat"
 #endif /* RTMP_RBUS_SUPPORT */
 #endif /* SINGLE_SKU_V2 */
 
@@ -531,7 +531,7 @@ do { \
 #define	THREAD_PID_INIT_VALUE	NULL
 /* TODO: Use this IOCTL carefully when linux kernel version larger than 2.6.27, because the PID only correct when the user space task do this ioctl itself. */
 /*#define RTMP_GET_OS_PID(_x, _y)    _x = get_task_pid(current, PIDTYPE_PID); */
-#define RT_GET_OS_PID(_x, _y)		do{rcu_read_lock(); _x=(ULONG)current->pids[PIDTYPE_PID].pid; rcu_read_unlock();}while(0)
+#define RT_GET_OS_PID(_x, _y)		do{rcu_read_lock(); _x=current->pids[PIDTYPE_PID].pid; rcu_read_unlock();}while(0)
 #ifdef OS_ABL_FUNC_SUPPORT
 #define RTMP_GET_OS_PID(_a, _b)			RtmpOsGetPid(&_a, _b)
 #else
@@ -1016,8 +1016,6 @@ void linux_pci_unmap_single(void *handle, ra_dma_addr_t dma_addr, size_t size, i
 /***********************************************************************************
  *	Network Related data structure and marco definitions
  ***********************************************************************************/
-#define PKTSRC_NDIS             0x7f
-#define PKTSRC_DRIVER           0x0f
 
 #define RTMP_OS_NETDEV_STATE_RUNNING(_pNetDev)	((_pNetDev)->flags & IFF_UP)
 
@@ -1167,10 +1165,6 @@ void linux_pci_unmap_single(void *handle, ra_dma_addr_t dma_addr, size_t size, i
 /* 0x80~0xff: TX to a WDS link. b0~6: WDS index */
 #define RTMP_SET_PACKET_WCID(_p, _wdsidx)		(RTPKT_TO_OSPKT(_p)->cb[CB_OFF+2] = _wdsidx)
 #define RTMP_GET_PACKET_WCID(_p)          		((UCHAR)(RTPKT_TO_OSPKT(_p)->cb[CB_OFF+2]))
-
-/* 0xff: PKTSRC_NDIS, others: local TX buffer index. This value affects how to a packet */
-#define RTMP_SET_PACKET_SOURCE(_p, _pktsrc)		(RTPKT_TO_OSPKT(_p)->cb[CB_OFF+3] = _pktsrc)
-#define RTMP_GET_PACKET_SOURCE(_p)       		(RTPKT_TO_OSPKT(_p)->cb[CB_OFF+3])
 
 /* RTS/CTS-to-self protection method */
 #define RTMP_SET_PACKET_RTS(_p, _num)      		(RTPKT_TO_OSPKT(_p)->cb[CB_OFF+4] = _num)
@@ -1338,14 +1332,14 @@ void linux_pci_unmap_single(void *handle, ra_dma_addr_t dma_addr, size_t size, i
 
 #ifdef INF_AMAZON_SE
 /* [CB_OFF+28], 1B, Iverson patch for WMM A5-T07 ,WirelessStaToWirelessSta do not bulk out aggregate */
-#define RTMP_SET_PACKET_NOBULKOUT(_p, _morebit)			(RTPKT_TO_OSPKT(_p)->cb[CB_OFF+28] = _morebit)
-#define RTMP_GET_PACKET_NOBULKOUT(_p)					(RTPKT_TO_OSPKT(_p)->cb[CB_OFF+28])			
+#define RTMP_SET_PACKET_NOBULKOUT(_p, _morebit)		(RTPKT_TO_OSPKT(_p)->cb[CB_OFF+28] = _morebit)
+#define RTMP_GET_PACKET_NOBULKOUT(_p)			(RTPKT_TO_OSPKT(_p)->cb[CB_OFF+28])
 #endif /* INF_AMAZON_SE */
 
 
 #ifdef P2P_SUPPORT
-#define RTMP_SET_PACKET_OPMODE(_p, _flg)   (RTPKT_TO_OSPKT(_p)->cb[CB_OFF+26] = _flg)
-#define RTMP_GET_PACKET_OPMODE(_p)         (RTPKT_TO_OSPKT(_p)->cb[CB_OFF+26])
+#define RTMP_SET_PACKET_OPMODE(_p, _flg)		(RTPKT_TO_OSPKT(_p)->cb[CB_OFF+26] = _flg)
+#define RTMP_GET_PACKET_OPMODE(_p)			(RTPKT_TO_OSPKT(_p)->cb[CB_OFF+26])
 #endif /* P2P_SUPPORT */
 
 
@@ -1367,17 +1361,11 @@ void FlashRead(UCHAR * p, ULONG a, ULONG b);
 
 int wl_proc_init(void);
 int wl_proc_exit(void);
-
-#if defined(CONFIG_RA_CLASSIFIER)||defined(CONFIG_RA_CLASSIFIER_MODULE)
-extern volatile unsigned long classifier_cur_cycle;
-extern int (*ra_classifier_hook_rx) (struct sk_buff *skb, unsigned long cycle);
-#endif /* defined(CONFIG_RA_CLASSIFIER)||defined(CONFIG_RA_CLASSIFIER_MODULE) */
 #endif /* RTMP_RBUS_SUPPORT */
 
 #if LINUX_VERSION_CODE <= 0x20402	/* Red Hat 7.1 */
 struct net_device *alloc_netdev(int sizeof_priv, const char *mask, void (*setup)(struct net_device *));
 #endif /* LINUX_VERSION_CODE */
-
 
 #ifdef RTMP_MAC_PCI
 /* function declarations */
@@ -1405,8 +1393,8 @@ extern int ra_mtd_write(int num, loff_t to, size_t len, const u_char *buf);
 extern int ra_mtd_read(int num, loff_t from, size_t len, u_char *buf);
 
 #if !defined(CONFIG_RA_NAT_NONE)
-extern int (*ra_sw_nat_hook_tx)(VOID *skb);
 extern int (*ra_sw_nat_hook_rx)(VOID *skb);
+extern int (*ra_sw_nat_hook_tx)(VOID *skb, int gmac_no);
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29)
@@ -1425,11 +1413,10 @@ extern int (*ra_sw_nat_hook_rx)(VOID *skb);
 
 ******************************************************************************/
 
-#define RTMP_USB_PKT_COPY(__pNetDev, __pNetPkt, __Len, __pData)			\
-{																		\
-	memcpy(skb_put(__pNetPkt, __Len), __pData, __Len);					\
-	GET_OS_PKT_NETDEV(__pNetPkt) = __pNetDev;							\
-	RTMP_SET_PACKET_SOURCE(OSPKT_TO_RTPKT(__pNetPkt), PKTSRC_NDIS);		\
+#define RTMP_USB_PKT_COPY(__pNetDev, __pNetPkt, __Len, __pData)				\
+{											\
+	memcpy(skb_put(__pNetPkt, __Len), __pData, __Len);				\
+	GET_OS_PKT_NETDEV(__pNetPkt) = __pNetDev;					\
 }
 
 typedef struct usb_device_id USB_DEVICE_ID;

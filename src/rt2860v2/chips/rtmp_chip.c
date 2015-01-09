@@ -691,17 +691,11 @@ done:
 	DBGPRINT(RT_DEBUG_TRACE, ("Chip VCO calibration mode = %d!\n", pChipCap->FlgIsVcoReCalMode));
 }
 
-
-
 #ifdef GREENAP_SUPPORT
-#ifdef RT305x
-extern REG_PAIR   RT305x_RFRegTable[];
-#endif /* RT305x */
 VOID EnableAPMIMOPSv2(
-	IN PRTMP_ADAPTER		pAd,
-	IN BOOLEAN				ReduceCorePower)
+	IN PRTMP_ADAPTER		pAd)
 {
-	UCHAR	BBPR3 = 0, BBPR95 = 0;
+	UCHAR	BBPR3 = 0;
 	UINT32 	macdata = 0;
 
 	/* enable MMPS BBP control register*/
@@ -709,22 +703,27 @@ VOID EnableAPMIMOPSv2(
 	BBPR3 |= 0x04;	/*bit 2*/
 	RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R3, BBPR3);
 
+#if defined(RT6352)
 	if (IS_RT6352(pAd))
 	{
+		UCHAR BBPR95 = 0;
 		RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R95, &BBPR95);
 		BBPR95 &= ~(0x80); /* bit 7 */
 		RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R95, BBPR95);
 	}
+#endif
 
 	/* enable MMPS MAC control register*/
 	RTMP_IO_READ32(pAd, 0x1210, &macdata);
 	macdata |= 0x09;	/*bit 0, 3*/
 	RTMP_IO_WRITE32(pAd, 0x1210, macdata);
 
+#if defined(RT3883) || defined(RT6352)
 	/* swith to one-PAPE mode */
 	RTMP_IO_READ32(pAd, TXOP_HLDR_ET, &macdata);
 	macdata = (macdata & (~0x18)) | 0x8;
 	RTMP_IO_WRITE32(pAd, TXOP_HLDR_ET, macdata);
+#endif
 
 	DBGPRINT(RT_DEBUG_INFO, ("EnableAPMIMOPSNew, 30xx changes the # of antenna to 1\n"));
 }
@@ -732,151 +731,285 @@ VOID EnableAPMIMOPSv2(
 VOID DisableAPMIMOPSv2(
 	IN PRTMP_ADAPTER		pAd)
 {
-	UCHAR	BBPR3 = 0, BBPR95 = 0;
+	UCHAR	BBPR3 = 0;
 	UINT32 	macdata = 0;
 	
 	RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R3, &BBPR3);
 	BBPR3 &= ~(0x04);	/*bit 2*/
 	RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R3, BBPR3);
 
+#if defined(RT6352)
 	if (IS_RT6352(pAd))
 	{
 		if (pAd->Antenna.field.RxPath > 1)
 		{
+			UCHAR BBPR95 = 0;
 			RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R95, &BBPR95);
 			BBPR95 |= 0x80;
 			RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R95, BBPR95);
 		}
 	}
+#endif
 
 	/* enable MMPS MAC control register*/
 	RTMP_IO_READ32(pAd, 0x1210, &macdata);
 	macdata &= ~(0x09);	/*bit 0, 3*/
 	RTMP_IO_WRITE32(pAd, 0x1210, macdata);
 
+#if defined(RT3883) || defined(RT6352)
 	/* disable one-PAPE mode */
 	RTMP_IO_READ32(pAd, TXOP_HLDR_ET, &macdata);
 	macdata &= ~(0x18);
 	RTMP_IO_WRITE32(pAd, TXOP_HLDR_ET, macdata);
+#endif
 
 	DBGPRINT(RT_DEBUG_INFO, ("DisableAPMIMOPSNew, 30xx reserve only one antenna\n"));
 }
 
 VOID EnableAPMIMOPSv1(
-	IN PRTMP_ADAPTER		pAd,
-	IN BOOLEAN				ReduceCorePower)
+	IN PRTMP_ADAPTER		pAd)
 {
 	UCHAR	BBPR3 = 0,BBPR1 = 0;
-	ULONG	TxPinCfg = 0x00050F0A;/*Gary 2007/08/09 0x050A0A*/
+	ULONG	TxPinCfg;
 	UCHAR	BBPR4=0;
 
 	UCHAR	CentralChannel;
 	/*UINT32	Value=0;*/
 
-
 #ifdef RT305x
 	UCHAR 	RFValue=0;
 		
 	RT30xxReadRFRegister(pAd, RF_R01, &RFValue);
 	RFValue &= 0x03;	//clear bit[7~2]
-	RFValue |= 0x3C; // default 2Tx 2Rx
-	// turn off tx1
-	RFValue &= ~(0x1 << 5);
-	// turn off rx1
-	RFValue &= ~(0x1 << 4);
+	RFValue |= 0xF0;
 	// Turn off unused PA or LNA when only 1T or 1R
-#endif /* RT305x */
+#endif // RT305x //
 
-	if(pAd->CommonCfg.Channel>14)
-		TxPinCfg=0x00050F05;
+	if(pAd->CommonCfg.Channel <= 14)
+	{
+		TxPinCfg = 0x00050F0A;
 		
-	TxPinCfg &= 0xFFFFFFF3;
-	TxPinCfg &= 0xFFFFF3FF;
+		// Turn off unused PA or LNA when only 1T/1R
+#if defined(RT2883) || defined(RT3883) || defined(RT3593)
+		if (IS_RT2883(pAd) || IS_RT3883(pAd) || IS_RT3593(pAd))
+		{
+			TxPinCfg = 0x32050F0A;
+			
+			//Disable unused PA_PE
+			TxPinCfg = TxPinCfg & ~0x0300000D;
+			
+			//Disable unused LNA_PE
+			TxPinCfg = TxPinCfg & ~0x30000C00;
+		}
+		else
+#endif /* defined(RT2883) || defined(RT3883) || defined(RT3593) */
+		{
+			TxPinCfg &= 0xFFFFFFF3;
+			TxPinCfg &= 0xFFFFF3FF;
+		}
+	}
+	else
+	{
+		TxPinCfg = 0x00050F05;
+		
+		// Turn off unused PA or LNA when only 1T/1R
+#if defined(RT2883) || defined(RT3883) || defined(RT3593)
+		if (IS_RT2883(pAd) || IS_RT3883(pAd) || IS_RT3593(pAd))
+		{
+			TxPinCfg = 0x31050F05;
+			
+			//Disable unused PA_PE
+			TxPinCfg = TxPinCfg & ~0x0300000E;
+			
+			//Disable unused LNA_PE
+			TxPinCfg = TxPinCfg & ~0x30000C00;
+		}
+		else
+#endif /* defined(RT2883) || defined(RT3883) || defined(RT3593) */
+		{
+			TxPinCfg &= 0xFFFFFFF3;
+			TxPinCfg &= 0xFFFFF3FF;
+		}
+	}
+
 	pAd->ApCfg.bGreenAPActive=TRUE;
 
 	CentralChannel = pAd->CommonCfg.CentralChannel;
-		DBGPRINT(RT_DEBUG_INFO, ("Run with BW_20\n"));
-		pAd->CommonCfg.CentralChannel = pAd->CommonCfg.Channel;
-		CentralChannel = pAd->CommonCfg.Channel;
+
+	DBGPRINT(RT_DEBUG_INFO, ("Run with BW_20\n"));
+	pAd->CommonCfg.CentralChannel = pAd->CommonCfg.Channel;
+	CentralChannel = pAd->CommonCfg.Channel;
+
 	/* Set BBP registers to BW20 */
-		RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R4, &BBPR4);
-		BBPR4 &= (~0x18);
-		RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R4, BBPR4);
+	RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R4, &BBPR4);
+	BBPR4 &= (~0x18);
+	RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R4, BBPR4);
+
 	/* RF Bandwidth related registers would be set in AsicSwitchChannel() */
-		pAd->CommonCfg.BBPCurrentBW = BW_20;
-	if (pAd->Antenna.field.RxPath>1||pAd->Antenna.field.TxPath>1)
+	pAd->CommonCfg.BBPCurrentBW = BW_20;
+
+	if (pAd->Antenna.field.RxPath > 1 || pAd->Antenna.field.TxPath > 1)
 	{
 		/*TX Stream*/
-	RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R1, &BBPR1);
+		RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R1, &BBPR1);
 		/*Rx Stream*/
 		RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R3, &BBPR3);
 		
+		BBPR3 &= (~0x18);
+		BBPR1 &= (~0x18);
 		
-	BBPR3 &= (~0x18);
-	BBPR1 &= (~0x18);
+#ifdef RT3352
+		/*
+			For power saving purpose, Gary set BBP_R3[7:6]=11 to save more power
+			and he also rewrote the description about BBP_R3 to point out the
+			WiFi driver should modify BBP_R3[5] based on Low/High frequency
+			channel.(not a fixed value).
+		*/
+		BBPR3 |= 0xe0;	//bit 6 & 7, i.e. Use 5-bit ADC for Acquisition
+#endif /* RT3352 */
 
-	RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R1, BBPR1);
-
+		RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R1, BBPR1);
 		RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R3, BBPR3);
 		
-	RTMP_IO_WRITE32(pAd, TX_PIN_CFG, TxPinCfg);
-
+		RTMP_IO_WRITE32(pAd, TX_PIN_CFG, TxPinCfg);
 #ifdef RT305x
-	RT30xxWriteRFRegister(pAd, RF_R01, RFValue);
+		RT30xxWriteRFRegister(pAd, RF_R01, RFValue);
 #endif /* RT305x */
 	}
+
 	AsicSwitchChannel(pAd, CentralChannel, FALSE);
 
 	DBGPRINT(RT_DEBUG_INFO, ("EnableAPMIMOPS, 305x/28xx changes the # of antenna to 1\n"));
 }
 
-
 VOID DisableAPMIMOPSv1(
 	IN PRTMP_ADAPTER		pAd)
 {
 	UCHAR	BBPR3=0,BBPR1=0;
-	ULONG	TxPinCfg = 0x00050F0A;/*Gary 2007/08/09 0x050A0A*/
-
+	ULONG	TxPinCfg;
 	UCHAR	CentralChannel;
 	UINT32	Value=0;
-
 
 #ifdef RT305x
 	UCHAR 	RFValue=0;
 
 	RT30xxReadRFRegister(pAd, RF_R01, &RFValue);
 	RFValue &= 0x03;	//clear bit[7~2]
-	RFValue |= 0x3C; // default 2Tx 2Rx
-#endif /* RT305x */
-
-	if(pAd->CommonCfg.Channel>14)
-		TxPinCfg=0x00050F05;
-	/* Turn off unused PA or LNA when only 1T or 1R*/
 	if (pAd->Antenna.field.TxPath == 1)
-	{
-		TxPinCfg &= 0xFFFFFFF3;
-	}
+		RFValue |= 0xA0;
+	else if (pAd->Antenna.field.TxPath == 2)
+		RFValue |= 0x80;
 	if (pAd->Antenna.field.RxPath == 1)
-	{
-		TxPinCfg &= 0xFFFFF3FF;
-	}
+		RFValue |= 0x50;
+	else if (pAd->Antenna.field.RxPath == 2)
+		RFValue |= 0x40;
+#endif // RT305x //
 
+	if(pAd->CommonCfg.Channel <= 14)
+	{
+		TxPinCfg = 0x00050F0A;
+		
+		// Turn off unused PA or LNA when only 1T/1R, 2T/2R
+#if defined(RT2883) || defined(RT3883) || defined(RT3593)
+		if (IS_RT2883(pAd) || IS_RT3883(pAd) || IS_RT3593(pAd))
+		{
+			TxPinCfg = 0x32050F0A;
+			
+			// Disable unused PA_PE
+			if (pAd->Antenna.field.TxPath == 1)
+			{
+				TxPinCfg = TxPinCfg & ~0x0300000D;
+			}
+			else if (pAd->Antenna.field.TxPath == 2)
+			{
+				TxPinCfg = TxPinCfg & ~0x03000005;
+			}
+			
+			// Disable unused LNA_PE
+			if (pAd->Antenna.field.RxPath == 1)
+			{
+				TxPinCfg = TxPinCfg & ~0x30000C00;
+			}
+			else if (pAd->Antenna.field.RxPath == 2)
+			{
+				TxPinCfg = TxPinCfg & ~0x30000000;
+			}
+		}
+		else
+#endif /* defined(RT2883) || defined(RT3883) || defined(RT3593) */
+		{
+			if (pAd->Antenna.field.TxPath == 1)
+			{
+				TxPinCfg &= 0xFFFFFFF3;
+			}
+			
+			if (pAd->Antenna.field.RxPath == 1)
+			{
+				TxPinCfg &= 0xFFFFF3FF;
+			}
+		}
+	}
+	else
+	{
+		TxPinCfg = 0x00050F05;
+		
+		// Turn off unused PA or LNA when only 1T/1R, 2T/2R
+#if defined(RT2883) || defined(RT3883) || defined(RT3593)
+		if (IS_RT2883(pAd) || IS_RT3883(pAd) || IS_RT3593(pAd))
+		{
+			TxPinCfg = 0x31050F05;
+			
+			//Disable unused PA_PE
+			if (pAd->Antenna.field.TxPath == 1)
+			{
+				TxPinCfg = TxPinCfg & ~0x0300000E;
+			}
+			else if (pAd->Antenna.field.TxPath == 2)
+			{
+				TxPinCfg = TxPinCfg & ~0x0300000A;
+			}
+			
+			//Disable unused LNA_PE
+			if (pAd->Antenna.field.RxPath == 1)
+			{
+				TxPinCfg = TxPinCfg & ~0x30000C00;
+			}
+			else if (pAd->Antenna.field.RxPath == 2)
+			{
+				TxPinCfg = TxPinCfg & ~0x30000000;
+			}
+		}
+		else
+#endif /* defined(RT2883) || defined(RT3883) || defined(RT3593) */
+		{
+			if (pAd->Antenna.field.TxPath == 1)
+			{
+				TxPinCfg &= 0xFFFFFFF3;
+			}
+			
+			if (pAd->Antenna.field.RxPath == 1)
+			{
+				TxPinCfg &= 0xFFFFF3FF;
+			}
+		}
+	}
 
 	pAd->ApCfg.bGreenAPActive=FALSE;
 
 	if ((pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth == BW_40) && (pAd->CommonCfg.Channel != 14))
-		{
-			DBGPRINT(RT_DEBUG_INFO, ("Run with BW_40\n"));
-			/* Set CentralChannel to work for BW40 */
+	{
+		DBGPRINT(RT_DEBUG_INFO, ("Run with BW_40\n"));
+		
+		/* Set CentralChannel to work for BW40 */
 		if (pAd->CommonCfg.RegTransmitSetting.field.EXTCHA == EXTCHA_ABOVE)
 		{
-				pAd->CommonCfg.CentralChannel = pAd->CommonCfg.Channel + 2;
-		
+			pAd->CommonCfg.CentralChannel = pAd->CommonCfg.Channel + 2;
+			
 			/*  TX : control channel at lower */
 			RTMP_IO_READ32(pAd, TX_BAND_CFG, &Value);
 			Value &= (~0x1);
 			RTMP_IO_WRITE32(pAd, TX_BAND_CFG, Value);
-
+			
 			/*  RX : control channel at lower */
 			RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R3, &Value);
 			Value &= (~0x20);
@@ -888,7 +1021,7 @@ VOID DisableAPMIMOPSv1(
 			
 			/*  TX : control channel at upper */
 			RTMP_IO_READ32(pAd, TX_BAND_CFG, &Value);
-			Value |= (0x1);		
+			Value |= (0x1);
 			RTMP_IO_WRITE32(pAd, TX_BAND_CFG, Value);
 			
 			/*  RX : control channel at upper */
@@ -896,19 +1029,24 @@ VOID DisableAPMIMOPSv1(
 			Value |= (0x20);
 			RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R3, Value);
 		}
+		
 		CentralChannel = pAd->CommonCfg.CentralChannel;
-
+		
 		/* Set BBP registers to BW40 */
 		RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R4, &Value);
 		Value &= (~0x18);
 		Value |= 0x10;
 		RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R4, Value);
+		
 		/* RF Bandwidth related registers would be set in AsicSwitchChannel() */
 		pAd->CommonCfg.BBPCurrentBW = BW_40;
 		AsicSwitchChannel(pAd, CentralChannel, FALSE);
 	}
+	
 	/*Rx Stream*/
 	RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R1, &BBPR1);
+	BBPR1 &= (~0x18);
+
 	/*Tx Stream*/
 	RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R3, &BBPR3);
 	BBPR3 &= (~0x18);
@@ -928,15 +1066,20 @@ VOID DisableAPMIMOPSv1(
 	}
 
 	/*Tx Stream*/
-	if ((pAd->CommonCfg.PhyMode >= PHY_11ABGN_MIXED) && (pAd->Antenna.field.TxPath == 2))
+	if ((pAd->CommonCfg.PhyMode >= PHY_11ABGN_MIXED) && (pAd->Antenna.field.TxPath >= 2))
 	{
-		BBPR1 &= (~0x18);
 		BBPR1 |= 0x10;
 	}
-	else
-	{
-		BBPR1 &= (~0x18);
-	}
+
+#ifdef RT3352
+	/*
+		For power saving purpose, Gary set BBP_R3[7:6]=11 to save more power
+		and he also rewrote the description about BBP_R3 to point out the
+		WiFi driver should modify BBP_R3[5] based on Low/High frequency
+		channel.(not a fixed value).
+	*/
+	BBPR3 &= (~0xe0);	//bit 6 & 7, i.e. Use 5-bit ADC for Acquisition
+#endif /* RT3352 */
 
 	RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R3, BBPR3);
 	RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R1, BBPR1);

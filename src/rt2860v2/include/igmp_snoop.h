@@ -39,7 +39,7 @@
 #define MLD_V1_LISTENER_DONE		132
 #define MLD_V2_LISTERNER_REPORT		143
 
-#define IGMPMAC_TB_ENTRY_AGEOUT_TIME (120 * OS_HZ)
+#define IGMPMAC_TB_ENTRY_AGEOUT_TIME	(135 * OS_HZ)
 
 #define MULTICAST_ADDR_HASH_INDEX(Addr)      (MAC_ADDR_HASH(Addr) & (MAX_LEN_OF_MULTICAST_FILTER_HASH_TABLE - 1))
 
@@ -95,8 +95,7 @@ BOOLEAN isMldPkt(
 	OUT PUCHAR *pMldHeader);
 
 BOOLEAN IPv6MulticastFilterExcluded(
-	IN PUCHAR pDstMacAddr,
-	IN PUCHAR pIpHeader);
+	IN PUCHAR pDstMacAddr);
 
 VOID MLDSnooping(
 	IN PRTMP_ADAPTER pAd,
@@ -144,12 +143,12 @@ NDIS_STATUS IgmpPktInfoQuery(
 
 NDIS_STATUS IgmpPktClone(
 	IN PRTMP_ADAPTER pAd,
+	IN PUCHAR pSrcBufVA,
 	IN PNDIS_PACKET pPacket,
 	IN INT IgmpPktInGroup,
 	IN PMULTICAST_FILTER_TABLE_ENTRY pGroupEntry,
 	IN UCHAR QueIdx,
-	IN UINT8 UserPriority,
-	IN PNET_DEV pNetDev);
+	IN UINT8 UserPriority);
 
 #endif /* __RTMP_IGMP_SNOOP_H__ */
 

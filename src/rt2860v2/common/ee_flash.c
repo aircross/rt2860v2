@@ -59,17 +59,13 @@ static USHORT EE_FLASH_ID_LIST[]={
 #ifdef RT5350
 	0x5350,
 #endif /* RT5350 */
-
-
 #ifdef RT6352
 	0x6352,
 	0x7620,
 #endif /* RT6352 */
-
 };
 
 #define EE_FLASH_ID_NUM  (sizeof(EE_FLASH_ID_LIST) / sizeof(USHORT))
-
 
 
 /*******************************************************************************

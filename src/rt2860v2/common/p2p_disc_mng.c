@@ -57,7 +57,7 @@ static VOID P2PDiscCanlAction(
 	==========================================================================
  */
 	
- #ifdef RELEAE_EXCLUDE
+#ifdef RELEASE_EXCLUDE
 /*
 							Scan command			P2P Periodic				P2P Scan							CntlOidScanProc 			MlmeCntlMachinePerformAction						  P2P Periodic
 	P2P_ENABLE_LISTEN_ONLY ---------------> P2P_IDLE -----------> P2P_SEARCH ---------> P2P_SEARCH_COMMAND ---------------> P2P_SEARCH ---------------------------> P2P_SEARCH_COMPLETE -----------> P2P_IDLE

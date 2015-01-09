@@ -89,7 +89,6 @@ ULONG RtmpOsCopyToUser(
 	IN	ULONG					n);
 
 BOOLEAN RtmpOsStatsAlloc(
-	IN	VOID					**ppStats,
 	IN	VOID					**ppIwStats);
 
 /* OS Packet */
@@ -259,19 +258,7 @@ VOID RtmpOsPktReserve(
 	IN	PNDIS_PACKET			pNetPkt,
 	IN	UINT					Len);
 
-VOID RtmpOsPktProtocolAssign(
-	IN	PNDIS_PACKET			pNetPkt);
-
 VOID RtmpOsPktInfPpaSend(
-	IN	PNDIS_PACKET			pNetPkt);
-
-VOID RtmpOsPktRcvHandle(
-	IN	PNDIS_PACKET			pNetPkt);
-
-VOID RtmpOsPktNatMagicTag(
-	IN	PNDIS_PACKET			pNetPkt);
-
-VOID RtmpOsPktNatNone(
 	IN	PNDIS_PACKET			pNetPkt);
 
 VOID RtmpOsPktInit(
@@ -1007,3 +994,4 @@ extern UINT32 RT_RateSize;
 INT32  RtPrivIoctlSetVal(VOID);
 
 #endif /* __RT_OS_UTIL_H__ */
+

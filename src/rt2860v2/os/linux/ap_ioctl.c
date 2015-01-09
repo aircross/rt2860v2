@@ -41,16 +41,18 @@ struct iw_priv_args ap_privtab[] = {
   IW_PRIV_TYPE_CHAR | 1024, 0,
   "show"},
 { RTPRIV_IOCTL_GSITESURVEY,
-  IW_PRIV_TYPE_CHAR | 1024, IW_PRIV_TYPE_CHAR | 1024 ,
+  0, IW_PRIV_TYPE_CHAR | 1024 ,
   "get_site_survey"}, 
 #ifdef INF_AR9
-  { RTPRIV_IOCTL_GET_AR9_SHOW,
+{ RTPRIV_IOCTL_GET_AR9_SHOW,
   IW_PRIV_TYPE_CHAR | 1024, IW_PRIV_TYPE_CHAR | 1024 ,
   "ar9_show"}, 
 #endif
-  { RTPRIV_IOCTL_SET_WSCOOB,
+#ifdef WSC_AP_SUPPORT
+{ RTPRIV_IOCTL_SET_WSCOOB,
   IW_PRIV_TYPE_CHAR | 1024, IW_PRIV_TYPE_CHAR | 1024 ,
-  "set_wsc_oob"}, 
+  "set_wsc_oob"},
+#endif
 { RTPRIV_IOCTL_GET_MAC_TABLE,
   IW_PRIV_TYPE_CHAR | 1024, IW_PRIV_TYPE_CHAR | 1024 ,
   "get_mac_table"}, 

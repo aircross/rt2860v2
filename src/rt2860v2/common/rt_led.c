@@ -212,7 +212,9 @@ VOID SetLedMode(
  */
 void SetWPSLinkStatus(IN PRTMP_ADAPTER pAd)
 {
+#if defined(WSC_INCLUDED) || defined(CONFIG_WIFI_LED_SHARE)
 	PLED_OPERATION_MODE pCurrentLedCfg = &pAd->LedCntl.SWMCULedCntl.CurrentLedCfg;
+#endif
 	PWPS_LED_TIME_UNIT pWPSLedTimeUnit = &pAd->LedCntl.SWMCULedCntl.WPSLedTimeUnit;
 	
 	switch(pAd->LedCntl.SWMCULedCntl.LinkStatus)
@@ -905,7 +907,7 @@ VOID RTMPSetLEDStatus(
 			if(WscSupportWPSLEDMode10(pAd))
 			{
 				LinkStatus = LINK_STATUS_WPS_MODE10_TURN_OFF;
-				MCUCmd = MCU_SET_WPS_LED_MODE;;
+				MCUCmd = MCU_SET_WPS_LED_MODE;
 			}
 			else
 				bIgnored = TRUE;

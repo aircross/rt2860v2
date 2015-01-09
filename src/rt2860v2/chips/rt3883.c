@@ -1636,44 +1636,31 @@ VOID RTMPRT3883ReadChannelPwr(
 VOID	RTMPRT3883ABandSel(
 	IN	UCHAR	Channel)
 {
+#ifdef BOARD_EXT_SWITCH_LNA_2DOT4_5
 	UINT32 value;
 
+	/*set GPIO2(gpio#25) to GPIO mode */
+	value = le32_to_cpu(*(volatile u32 *)(0xb0000014));
+	value &= ~(1 << 2);
+	*((volatile uint32_t *)(0xb0000014)) = cpu_to_le32(value);
 
-		/*set GPIO2(gpio#25) to GPIO mode */
-		value = le32_to_cpu(*(volatile u32 *)(0xb0000014));
-		value &= ~(1 << 2);
-		*((volatile uint32_t *)(0xb0000014)) = cpu_to_le32(value);
+	/*config gpio#25 direction to output */
+	value = le32_to_cpu(*(volatile u32 *)(0xb000064c));
+	value |= (1 << 1);
+	*((volatile uint32_t *)(0xb000064c)) = cpu_to_le32(value);
 
-		/*config gpio#25 direction to output */
-		value = le32_to_cpu(*(volatile u32 *)(0xb000064c));
-		value |= (1 << 1);
-		*((volatile uint32_t *)(0xb000064c)) = cpu_to_le32(value);
-
-		if (Channel > 14)
-		{
-			/*5G band: clear gpio#25 to 0 */
-			*((volatile uint32_t *)(0xb0000658)) = cpu_to_le32(0x2);
-		}
-		else
-		{
-			/*2.4G band: set gpio#25 to 1 */
-			*((volatile uint32_t *)(0xb0000654)) = cpu_to_le32(0x2);
-		}
+	if (Channel > 14)
+	{
+		/*5G band: clear gpio#25 to 0 */
+		*((volatile uint32_t *)(0xb0000658)) = cpu_to_le32(0x2);
+	}
+	else
+	{
+		/*2.4G band: set gpio#25 to 1 */
+		*((volatile uint32_t *)(0xb0000654)) = cpu_to_le32(0x2);
+	}
+#endif
 }
-
-
-static VOID RT3883_AsicEeBufferInit(
-	IN	RTMP_ADAPTER *pAd)
-{
-	//extern UCHAR *EeBuffer;
-
-#ifdef RTMP_FLASH_SUPPORT
-	/* pAd->eebuf = RT3883_EeBuffer;*/
-	/* EeBuffer = RT3883_EeBuffer;*/
-#endif /* RTMP_FLASH_SUPPORT */
-
-}
-
 
 static VOID RT3883_ChipSwitchChannel(
 	IN PRTMP_ADAPTER 			pAd,
@@ -2298,7 +2285,6 @@ VOID RT3883_Init(
 	pChipOps->EnableAPMIMOPS = EnableAPMIMOPSv2;
 	pChipOps->DisableAPMIMOPS = DisableAPMIMOPSv2;
 #endif /* GREENAP_SUPPORT */
-
 }
 
 

@@ -955,13 +955,8 @@ VOID RT5350_ChipSwitchChannel(
 				RFValue = 0x46;
 				RT30xxWriteRFRegister(pAd, RF_R12, (UCHAR)RFValue);
 
-
 				RT30xxReadRFRegister(pAd, RF_R30, (PUCHAR)&RFValue);
-				if ((pAd->CommonCfg.BBPCurrentBW == BW_40)
-#ifdef COC_SUPPORT
-					&& (pAd->CoC_sleep == 0)
-#endif
-				)
+				if (pAd->CommonCfg.BBPCurrentBW == BW_40)
 					RFValue |= 0x06; // 40MBW tx_h20M=1,rx_h20M=1
 				else
 					RFValue &= ~(0x06); // 20MBW tx_h20M=0,rx_h20M=0
@@ -1248,7 +1243,7 @@ VOID RT5350_AsicTxAlcGetAutoAgcOffset(
 	CHAR TotalDeltaPower = 0; 
 	BBP_R49_STRUC BbpR49;
 	UINT32 desiredTSSI = 0, currentTSSI = 0, room_up = 0, room_down = 0;
-	const TX_POWER_TUNING_ENTRY_STRUCT *TxPowerTuningTable = pAd->chipCap.TxPowerTuningTable_2G;
+	TX_POWER_TUNING_ENTRY_STRUCT *TxPowerTuningTable = pAd->chipCap.TxPowerTuningTable_2G;
 	PTX_POWER_TUNING_ENTRY_STRUCT pTxPowerTuningEntry = NULL;
 	UCHAR RFValue = 0;
 	CHAR DeltaPwr = 0, TuningTableIndex = 0;

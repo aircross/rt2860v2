@@ -77,28 +77,29 @@ VOID MBSS_Init(
 	INT status;
 	RTMP_OS_NETDEV_OP_HOOK	netDevHook;
 
-	/* sanity check to avoid redundant virtual interfaces are created */
-	if (pAd->FlgMbssInit != FALSE)
-		return;
-	/* End of if */
-
-
 	/* init */
 	MaxNumBss = pAd->ApCfg.BssidNum;
 	if (MaxNumBss > MAX_MBSSID_NUM(pAd))
 		MaxNumBss = MAX_MBSSID_NUM(pAd);
 	/* End of if */
 
+	/* sanity check to avoid redundant virtual interfaces are created */
+	if (!pAd->FlgMbssInit)
+	{
+		/* first IdBss must not be 0 (BSS0), must be 1 (BSS1) */
+		for(IdBss=FIRST_MBSSID; IdBss<MAX_MBSSID_NUM(pAd); IdBss++)
+			pAd->ApCfg.MBSSID[IdBss].MSSIDDev = NULL;
+		/* End of for */
+	}
 
-	/* first IdBss must not be 0 (BSS0), must be 1 (BSS1) */
-	for(IdBss=FIRST_MBSSID; IdBss<MAX_MBSSID_NUM(pAd); IdBss++)
-		pAd->ApCfg.MBSSID[IdBss].MSSIDDev = NULL;
-	/* End of for */
-
-    /* create virtual network interface */
+	/* create virtual network interface */
 	for(IdBss=FIRST_MBSSID; IdBss<MaxNumBss; IdBss++)
 	{
 		UINT32 MC_RowID = 0, IoctlIF = 0;
+		
+		if (pAd->ApCfg.MBSSID[IdBss].MSSIDDev)
+			continue;
+		
 #ifdef MULTIPLE_CARD_SUPPORT
 		MC_RowID = pAd->MC_RowID;
 #endif /* MULTIPLE_CARD_SUPPORT */
@@ -113,8 +114,7 @@ VOID MBSS_Init(
 		{
 			/* allocation fail, exit */
 			pAd->ApCfg.BssidNum = IdBss; /* re-assign new MBSS number */
-			DBGPRINT(RT_DEBUG_ERROR,
-                     ("Allocate network device fail (MBSS)...\n"));
+			DBGPRINT(RT_DEBUG_ERROR, ("Allocate network device fail (MBSS)...\n"));
 			break;
 		}
 		else
@@ -316,21 +316,20 @@ int MBSS_PacketSend(
 	IN	PNET_DEV					pDev,
 	IN	RTMP_NET_PACKET_TRANSMIT	Func)
 {
-    RTMP_ADAPTER     *pAd;
-    MULTISSID_STRUCT *pMbss;
-    PNDIS_PACKET     pPkt = (PNDIS_PACKET)pPktSrc;
-    INT              IdBss;
-
+	RTMP_ADAPTER     *pAd;
+	MULTISSID_STRUCT *pMbss;
+	PNDIS_PACKET     pPkt = (PNDIS_PACKET)pPktSrc;
+	INT              IdBss;
 
 	pAd = RTMP_OS_NETDEV_GET_PRIV(pDev);
 	ASSERT(pAd);
 
 #ifdef RALINK_ATE
-    if (ATE_ON(pAd))
-    {
-        RELEASE_NDIS_PACKET(pAd, pPkt, NDIS_STATUS_FAILURE);
-        return 0;
-    } /* End of if */
+	if (ATE_ON(pAd))
+	{
+		RELEASE_NDIS_PACKET(pAd, pPkt, NDIS_STATUS_FAILURE);
+		return 0;
+	} /* End of if */
 #endif /* RALINK_ATE */
 
 	if ((RTMP_TEST_FLAG(pAd, fRTMP_ADAPTER_BSS_SCAN_IN_PROGRESS)) ||
@@ -343,30 +342,27 @@ int MBSS_PacketSend(
 	} /* End of if */
 
 
-    /* 0 is main BSS, dont handle it here */
-    /* FIRST_MBSSID = 1 */
-    pMbss = pAd->ApCfg.MBSSID;
+	/* 0 is main BSS, dont handle it here */
+	/* FIRST_MBSSID = 1 */
+	pMbss = pAd->ApCfg.MBSSID;
 
-    for(IdBss=FIRST_MBSSID; IdBss<pAd->ApCfg.BssidNum; IdBss++)
-    {
-        /* find the device in our MBSS list */
-        if (pMbss[IdBss].MSSIDDev == pDev)
+	for(IdBss=FIRST_MBSSID; IdBss<pAd->ApCfg.BssidNum; IdBss++)
+	{
+		/* find the device in our MBSS list */
+		if (pMbss[IdBss].MSSIDDev == pDev)
 		{
-/*			NdisZeroMemory((PUCHAR)&(RTPKT_TO_OSPKT(pPktSrc))->cb[CB_OFF], 15); */
 			NdisZeroMemory((PUCHAR)(GET_OS_PKT_CB(pPktSrc) + CB_OFF), 15);
-            RTMP_SET_PACKET_NET_DEVICE_MBSSID(pPktSrc, IdBss);
-/*			SET_OS_PKT_NETDEV(pPktSrc, pDev); */
-		 
-
-            /* transmit the packet */
-            return Func(pPktSrc);
+			RTMP_SET_PACKET_NET_DEVICE_MBSSID(pPktSrc, IdBss);
+			
+			/* transmit the packet */
+			return Func(pPktSrc);
 		}
 	}
 
-    /* can not find the BSS so discard the packet */
+	/* can not find the BSS so discard the packet */
 	RELEASE_NDIS_PACKET(pAd, pPkt, NDIS_STATUS_FAILURE);
 
-    return 0;
+	return 0;
 } /* End of MBSS_PacketSend */
 
 

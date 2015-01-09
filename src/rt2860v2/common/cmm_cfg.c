@@ -1203,15 +1203,54 @@ INT RTMP_COM_IoctlHandle(
 
 		case CMD_RTPRIV_IOCTL_INF_STATS_GET:
 			/* get statistics */
-			{			
-				RT_CMD_STATS *pStats = (RT_CMD_STATS *)pData;
-				pStats->pStats = pAd->stats;
+			{
+				RT_CMD_STATS64 *pStats = (RT_CMD_STATS64 *)pData;
+#ifdef CONFIG_AP_SUPPORT
+				if(pAd->OpMode == OPMODE_AP)
+				{
+					INT index;
+					MULTISSID_STRUCT *pMBSSID;
+					
+					for(index = 0; index < MAX_MBSSID_NUM(pAd); index++)
+					{
+						if (pAd->ApCfg.MBSSID[index].MSSIDDev == (PNET_DEV)(pStats->pNetDev))
+						{
+							break;
+						}
+					}
+					
+					if(index >= MAX_MBSSID_NUM(pAd))
+					{
+						//reset counters
+						NdisZeroMemory(pStats, sizeof(RT_CMD_STATS64));
+						
+						DBGPRINT(RT_DEBUG_ERROR, ("CMD_RTPRIV_IOCTL_INF_STATS_GET: can not find mbss I/F\n"));
+						return NDIS_STATUS_FAILURE;
+					}
+					
+					pMBSSID = &pAd->ApCfg.MBSSID[index];
+					
+					pStats->rx_bytes = pMBSSID->ReceivedByteCount.QuadPart;
+					pStats->tx_bytes = pMBSSID->TransmittedByteCount.QuadPart;
+					pStats->rx_packets = pMBSSID->RxCount;
+					pStats->tx_packets = pMBSSID->TxCount;
+					pStats->rx_errors = pMBSSID->RxErrorCount;
+					pStats->tx_errors = 0;
+					pStats->multicast = pMBSSID->mcPktsRx; /* multicast packets received */
+					pStats->collisions = 0;
+					pStats->rx_over_errors = 0;
+					pStats->rx_crc_errors = 0;
+					pStats->rx_frame_errors = 0;
+					pStats->rx_fifo_errors = 0;
+				}
+#endif
+#ifdef CONFIG_STA_SUPPORT
 				if(pAd->OpMode == OPMODE_STA)
 				{
-					pStats->rx_packets = pAd->WlanCounters.ReceivedFragmentCount.QuadPart;
-					pStats->tx_packets = pAd->WlanCounters.TransmittedFragmentCount.QuadPart;
 					pStats->rx_bytes = pAd->RalinkCounters.ReceivedByteCount;
 					pStats->tx_bytes = pAd->RalinkCounters.TransmittedByteCount;
+					pStats->rx_packets = pAd->WlanCounters.ReceivedFragmentCount.QuadPart;
+					pStats->tx_packets = pAd->WlanCounters.TransmittedFragmentCount.QuadPart;
 					pStats->rx_errors = pAd->Counters8023.RxErrors;
 					pStats->tx_errors = pAd->Counters8023.TxErrors;
 					pStats->multicast = pAd->WlanCounters.MulticastReceivedFrameCount.QuadPart;   /* multicast packets received*/
@@ -1220,51 +1259,6 @@ INT RTMP_COM_IoctlHandle(
 					pStats->rx_crc_errors = 0;/*pAd->WlanCounters.FCSErrorCount;      recved pkt with crc error*/
 					pStats->rx_frame_errors = pAd->Counters8023.RcvAlignmentErrors;          /* recv'd frame alignment error*/
 					pStats->rx_fifo_errors = pAd->Counters8023.RxNoBuffer;                   /* recv'r fifo overrun*/
-				}
-#ifdef CONFIG_AP_SUPPORT
-				else if(pAd->OpMode == OPMODE_AP)
-				{
-					INT index;
-					for(index = 0; index < MAX_MBSSID_NUM(pAd); index++)
-					{
-						if (pAd->ApCfg.MBSSID[index].MSSIDDev == (PNET_DEV)(pStats->pNetDev))
-						{
-							break;
-						}
-					}
-						
-					if(index >= MAX_MBSSID_NUM(pAd))
-					{
-						//reset counters
-						pStats->rx_packets = 0;
-						pStats->tx_packets = 0;
-						pStats->rx_bytes = 0;
-						pStats->tx_bytes = 0;
-						pStats->rx_errors = 0;
-						pStats->tx_errors = 0;
-						pStats->multicast = 0;   /* multicast packets received*/
-						pStats->collisions = 0;  /* Collision packets*/
-						pStats->rx_over_errors = 0; /* receiver ring buff overflow*/
-						pStats->rx_crc_errors = 0; /* recved pkt with crc error*/
-						pStats->rx_frame_errors = 0; /* recv'd frame alignment error*/
-						pStats->rx_fifo_errors = 0; /* recv'r fifo overrun*/
-						   
-						DBGPRINT(RT_DEBUG_ERROR, ("CMD_RTPRIV_IOCTL_INF_STATS_GET: can not find mbss I/F\n"));
-						return NDIS_STATUS_FAILURE;
-					}
-					
-					pStats->rx_packets = pAd->ApCfg.MBSSID[index].RxCount;
-					pStats->tx_packets = pAd->ApCfg.MBSSID[index].TxCount;
-					pStats->rx_bytes = pAd->ApCfg.MBSSID[index].ReceivedByteCount;
-					pStats->tx_bytes = pAd->ApCfg.MBSSID[index].TransmittedByteCount;
-					pStats->rx_errors = pAd->ApCfg.MBSSID[index].RxErrorCount;
-					pStats->tx_errors = pAd->ApCfg.MBSSID[index].TxErrorCount;
-					pStats->multicast = pAd->ApCfg.MBSSID[index].mcPktsRx; /* multicast packets received */
-					pStats->collisions = 0;  /* Collision packets*/
-					pStats->rx_over_errors = 0;                   /* receiver ring buff overflow*/
-					pStats->rx_crc_errors = 0;/* recved pkt with crc error*/
-					pStats->rx_frame_errors = 0;          /* recv'd frame alignment error*/
-					pStats->rx_fifo_errors = 0;                   /* recv'r fifo overrun*/
 				}
 #endif
 			}
@@ -1424,6 +1418,18 @@ INT RTMP_COM_IoctlHandle(
 			break;
 #endif /* WDS_SUPPORT */
 
+#ifdef APCLI_SUPPORT
+		case CMD_RTPRIV_IOCTL_APCLI_STATS_GET:
+			if (Data == INT_APCLI)
+			{
+				if (ApCli_StatsGet(pAd, pData) != TRUE)
+					return NDIS_STATUS_FAILURE;
+			}
+			else
+				return NDIS_STATUS_FAILURE;
+			break;
+#endif /* APCLI_SUPPORT */
+
 #ifdef RALINK_ATE
 #ifdef RALINK_QA
 		case CMD_RTPRIV_IOCTL_ATE:
@@ -1558,6 +1564,7 @@ INT Set_SiteSurvey_Proc(
         	Ssid.SsidLength = strlen(arg);
 		}
 
+		pAd->ApCfg.bImprovedScan = TRUE;
 		if (Ssid.SsidLength == 0)
 			ApSiteSurvey(pAd, &Ssid, SCAN_PASSIVE, FALSE);
 		else
@@ -1659,35 +1666,4 @@ INT Set_TemperatureCAL_Proc(
 }
 #endif /* RTMP_TEMPERATURE_CALIBRATION */
 #endif /* RT6352 */
-
-#ifdef MCS_LUT_SUPPORT
-INT Set_HwTxRateLookUp_Proc(
-	IN RTMP_ADAPTER	*pAd,
-	IN PSTRING arg)
-{
-	UCHAR Enable;
-	UINT32 MacReg;
-
-	Enable = simple_strtol(arg, 0, 10);
-
-	RTMP_IO_READ32(pAd, TX_FBK_LIMIT, &MacReg);
-	if (Enable)
-	{
-		MacReg |= 0x00040000;
-		pAd->bUseHwTxLURate = TRUE;
-		DBGPRINT(RT_DEBUG_TRACE, ("==>UseHwTxLURate (ON)\n"));
-	}
-	else
-	{
-		MacReg &= (~0x00040000);
-		pAd->bUseHwTxLURate = FALSE;
-		DBGPRINT(RT_DEBUG_TRACE, ("==>UseHwTxLURate (OFF)\n"));
-	}
-	RTMP_IO_WRITE32(pAd, TX_FBK_LIMIT, MacReg);
-
-	DBGPRINT(RT_DEBUG_WARN, ("UseHwTxLURate = %d \n", pAd->bUseHwTxLURate));
-
-	return TRUE;
-}
-#endif /* MCS_LUT_SUPPORT */
 

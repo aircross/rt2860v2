@@ -34,6 +34,13 @@
 #include "rt_os_net.h"
 #include <linux/pci.h>
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,8,0)
+#define __devinit
+#define __devinitdata
+#define __devexit
+#define __devexit_p
+#endif
+
 /* */
 /* Function declarations */
 /* */
@@ -275,12 +282,12 @@ static int rt2860_resume(
 
 static INT __init rt2860_init_module(VOID)
 {
-	DBGPRINT(RT_DEBUG_ERROR, ("register %s\n", RTMP_DRV_NAME));
+	DBGPRINT(RT_DEBUG_TRACE, ("register %s\n", RTMP_DRV_NAME));
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,5,0)
 	return pci_register_driver(&rt2860_driver);
 #else
-    return pci_module_init(&rt2860_driver);
+	return pci_module_init(&rt2860_driver);
 #endif
 }
 
@@ -355,7 +362,6 @@ static INT __devinit   rt2860_probe(
 
 /*RtmpDevInit============================================== */
 	/* Allocate RTMP_ADAPTER adapter structure */
-/*	handle = kmalloc(sizeof(struct os_cookie), GFP_KERNEL); */
 	os_alloc_mem(NULL, (UCHAR **)&handle, sizeof(struct os_cookie));
 	if (handle == NULL)
 	{
@@ -516,6 +522,6 @@ static VOID __devexit rt2860_remove_one(
 	RtmpOSNetDevFree(net_dev);
 }
  
-
+MODULE_LICENSE("Proprietary");
 
 

@@ -38,35 +38,18 @@ struct _RSSI_SAMPLE;
 #include "chip/mac_pci.h"
 #endif /* RTMP_MAC_PCI */
 
-
-#ifdef RT2860
-#include "chip/rt2860.h"
-#include "chip/rt28xx.h"
-#endif /* RT2860 */
-
-
-
-
 #ifdef RT2880
 #include "chip/rt2880.h"
 #include "chip/rt28xx.h"
 #endif /* RT2880 */
 
-#ifdef RT2883
-#include "chip/rt2883.h"
-#endif /* RT2883 */
-
 #ifdef RT3883
 #include "chip/rt3883.h"
 #endif /* RT3883 */
 
-
 #ifdef RT305x
 #include "chip/rt305x.h"
 #endif /* RT305x */
-
-
-
 
 #ifdef RT3352
 #include "chip/rt3352.h"
@@ -75,10 +58,6 @@ struct _RSSI_SAMPLE;
 #ifdef RT5350
 #include "chip/rt5350.h"
 #endif /* RT5350 */
-
-
-
-
 
 #ifdef RT6352
 #include "chip/rt6352.h"
@@ -945,7 +924,7 @@ struct _RTMP_CHIP_OP_ {
 	void (*AsicHaltAction)(struct _RTMP_ADAPTER *pAd);
 
 	/* Power save */
-	VOID (*EnableAPMIMOPS)(IN struct _RTMP_ADAPTER *pAd, IN BOOLEAN ReduceCorePower);
+	VOID (*EnableAPMIMOPS)(IN struct _RTMP_ADAPTER *pAd);
 	VOID (*DisableAPMIMOPS)(IN struct _RTMP_ADAPTER *pAd);
 
 	/* Chip tuning */
@@ -980,6 +959,20 @@ struct _RTMP_CHIP_OP_ {
 	VOID (*ChipIQCalibration)(
 				IN struct _RTMP_ADAPTER *pAd,
 				IN UCHAR 				Channel);
+
+	UINT32 (*ChipGetCurrentTemp)(
+				IN struct _RTMP_ADAPTER *pAd);
+		
+#ifdef THERMAL_PROTECT_SUPPORT
+	VOID (*ThermalProDefaultCond)(
+				IN struct _RTMP_ADAPTER *pAd);
+
+	VOID (*ThermalPro1stCond)(
+				IN struct _RTMP_ADAPTER *pAd);
+
+	VOID (*ThermalPro2ndCond)(
+				IN struct _RTMP_ADAPTER *pAd);
+#endif /* THERMAL_PROTECT_SUPPORT */
 
 	/* TX ALC */
 	UINT32 (*TSSIRatio)(IN INT32 delta_power);
@@ -1058,9 +1051,9 @@ struct _RTMP_CHIP_OP_ {
 #endif /* MICROWAVE_OVEN_SUPPORT */
 };
 
-#define RTMP_CHIP_ENABLE_AP_MIMOPS(__pAd, __ReduceCorePower)				\
+#define RTMP_CHIP_ENABLE_AP_MIMOPS(__pAd)				\
 		if (__pAd->chipOps.EnableAPMIMOPS != NULL)							\
-			__pAd->chipOps.EnableAPMIMOPS(__pAd, __ReduceCorePower)
+			__pAd->chipOps.EnableAPMIMOPS(__pAd)
 
 #define RTMP_CHIP_DISABLE_AP_MIMOPS(__pAd)									\
 		if (__pAd->chipOps.DisableAPMIMOPS != NULL)							\
@@ -1125,6 +1118,24 @@ struct _RTMP_CHIP_OP_ {
 #define RTMP_CHIP_ASIC_GET_TSSI_RATIO(__pAd, __DeltaPwr)					\
 			__pAd->chipOps.TSSIRatio(__DeltaPwr)
 
+#define RTMP_CHIP_GET_CURRENT_TEMP(__pAd)					\
+		if (__pAd->chipOps.ChipGetCurrentTemp != NULL)					\
+			__pAd->chipOps.ChipGetCurrentTemp(__pAd)
+			
+#ifdef THERMAL_PROTECT_SUPPORT
+#define RTMP_CHIP_THERMAL_PRO_DEFAULT_COND(__pAd)					\
+		if (__pAd->chipOps.ThermalProDefaultCond != NULL)					\
+			__pAd->chipOps.ThermalProDefaultCond(__pAd)
+
+#define RTMP_CHIP_THERMAL_PRO_1st_COND(__pAd)					\
+		if (__pAd->chipOps.ThermalPro1stCond != NULL)					\
+			__pAd->chipOps.ThermalPro1stCond(__pAd)
+
+#define RTMP_CHIP_THERMAL_PRO_2nd_COND(__pAd)					\
+		if (__pAd->chipOps.ThermalPro2ndCond != NULL)					\
+			__pAd->chipOps.ThermalPro2ndCond(__pAd)
+#endif /* THERMAL_PROTECT_SUPPORT */
+			
 #define RTMP_CHIP_ASIC_FREQ_CAL_STOP(__pAd)									\
 		if (__pAd->chipOps.AsicFreqCalStop != NULL)							\
 			__pAd->chipOps.AsicFreqCalStop(__pAd)
@@ -1205,19 +1216,15 @@ VOID RTMPReadChannelPwr(
 
 VOID NetDevNickNameInit(IN struct _RTMP_ADAPTER *pAd);
 
-
-
 #ifdef GREENAP_SUPPORT
 VOID EnableAPMIMOPSv2(
-	IN struct _RTMP_ADAPTER		*pAd,
-	IN BOOLEAN				ReduceCorePower);
+	IN struct _RTMP_ADAPTER		*pAd);
 
 VOID DisableAPMIMOPSv2(
 	IN struct _RTMP_ADAPTER		*pAd);
 
 VOID EnableAPMIMOPSv1(
-	IN struct _RTMP_ADAPTER		*pAd,
-	IN BOOLEAN				ReduceCorePower);
+	IN struct _RTMP_ADAPTER		*pAd);
 
 VOID DisableAPMIMOPSv1(
 	IN struct _RTMP_ADAPTER		*pAd);

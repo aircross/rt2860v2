@@ -43,10 +43,6 @@ extern UCHAR RT3352_NUM_BBP_REG_PARMS;
 extern RTMP_REG_PAIR RT3352_MACRegTable[];
 extern UCHAR RT3352_NUM_MAC_REG_PARMS;
 
-#ifdef CONFIG_RALINK_RT3352
-#define PROCREG_DIR             "rt3352"
-#endif /* CONFIG_RALINK_RT3352 */
-
 VOID RT3352_Init(
 	IN struct _RTMP_ADAPTER		*pAd);
 
@@ -57,13 +53,6 @@ VOID NICInitRT3352BbpRegisters(
 	IN struct _RTMP_ADAPTER		*pAd);
 
 VOID NICInitRT3352RFRegisters(
-	IN struct _RTMP_ADAPTER		*pAd);
-
-VOID RT3352_EnableAPMIMOPS(
-	IN struct _RTMP_ADAPTER		*pAd,
-	IN BOOLEAN					ReduceCorePower);
-
-VOID RT3352_DisableAPMIMOPS(
 	IN struct _RTMP_ADAPTER		*pAd);
 
 VOID RT3352_RxSensitivityTuning(

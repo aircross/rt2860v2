@@ -446,8 +446,9 @@ INT	Set_Cmm_WirelessMode_Proc(
 
 #ifdef CONFIG_AP_SUPPORT
 #ifdef MBSS_SUPPORT
+#ifdef DBG
 	POS_COOKIE pObj = (POS_COOKIE) pAd->OS_Cookie;
-
+#endif
 	if (FlgIsDiffMbssModeUsed == 0)
 		success = RT_CfgSetWirelessMode(pAd, arg);
 	else
@@ -2286,6 +2287,32 @@ VOID	RTMPWPARemoveAllKeys(
 		
 	========================================================================
 */
+
+VOID RTMPSetDefaultChannel(
+	IN	PRTMP_ADAPTER	pAd
+	)
+{	
+	if ((pAd->CommonCfg.PhyMode != PHY_11A) 
+#ifdef DOT11_N_SUPPORT
+		&& (pAd->CommonCfg.PhyMode != PHY_11AN_MIXED) && (pAd->CommonCfg.PhyMode != PHY_11N_5G)
+#endif /* DOT11_N_SUPPORT */
+	)
+	{
+		pAd->CommonCfg.Channel = 1;
+	}
+	if ((pAd->CommonCfg.PhyMode == PHY_11A) || (pAd->CommonCfg.PhyMode == PHY_11ABG_MIXED) 
+#ifdef DOT11_N_SUPPORT
+		|| (pAd->CommonCfg.PhyMode == PHY_11ABGN_MIXED) || (pAd->CommonCfg.PhyMode == PHY_11AN_MIXED) 
+		|| (pAd->CommonCfg.PhyMode == PHY_11AGN_MIXED) || (pAd->CommonCfg.PhyMode == PHY_11N_5G)
+#endif /* DOT11_N_SUPPORT */
+	)
+	{
+		pAd->CommonCfg.Channel = 36;
+	}
+	DBGPRINT(RT_DEBUG_OFF,("%s() : default channel to %d \n",__FUNCTION__,pAd->CommonCfg.Channel));
+
+}
+
 /*
 	========================================================================
 	Routine Description:
@@ -3665,6 +3692,12 @@ VOID RTMPIoctlGetSiteSurvey(
 #endif /* CONFIG_STA_SUPPORT */
 
 	TotalLen = sizeof(CHAR)*((MAX_LEN_OF_BSS_TABLE)*max_len) + 100;
+
+	if (wrq->u.data.length == 0)
+		BufLen = IW_SCAN_MAX_DATA;	
+	else
+		BufLen = wrq->u.data.length;
+
 	os_alloc_mem(NULL, (PUCHAR *)&msg, TotalLen);
 
 	if (msg == NULL)
@@ -3745,7 +3778,6 @@ VOID RTMPIoctlGetMacTableStaInfo(
 	IN RTMP_IOCTL_INPUT_STRUCT *wrq)
 {
 	INT i;
-/*	RT_802_11_MAC_TABLE MacTab;*/
 	RT_802_11_MAC_TABLE *pMacTab = NULL;
 	PRT_802_11_MAC_ENTRY pDst;
 	MAC_TABLE_ENTRY *pEntry;
@@ -3784,8 +3816,8 @@ VOID RTMPIoctlGetMacTableStaInfo(
 			pDst->ConnectedTime = pEntry->StaConnectTime;
 			pDst->TxRate.word = pEntry->HTPhyMode.word;
 
-			pDst->LastRxRate = pEntry->LastRxRate;
 #if defined (RT2883) || defined (RT3883)
+			pDst->LastRxRate = pEntry->LastRxRate;
 			if (IS_RT2883(pAd) || IS_RT3883(pAd))
 			{
 				pDst->StreamSnr[0] = pEntry->BF_SNR[0];
@@ -3826,7 +3858,6 @@ VOID RTMPIoctlGetMacTable(
 	IN RTMP_IOCTL_INPUT_STRUCT *wrq)
 {
 	INT i;
-/*	RT_802_11_MAC_TABLE MacTab;*/
 	RT_802_11_MAC_TABLE *pMacTab = NULL;
 	RT_802_11_MAC_ENTRY *pDst;
 	MAC_TABLE_ENTRY *pEntry;
@@ -3841,7 +3872,6 @@ VOID RTMPIoctlGetMacTable(
 	}
 
 	NdisZeroMemory(pMacTab, sizeof(RT_802_11_MAC_TABLE));
-	pMacTab->Num = 0;
 	for (i=0; i<MAX_LEN_OF_MAC_TABLE; i++)
 	{
 		pEntry = &(pAd->MacTab.Content[i]);
@@ -3849,7 +3879,6 @@ VOID RTMPIoctlGetMacTable(
 		if (IS_ENTRY_CLIENT(pEntry) && (pEntry->Sst == SST_ASSOC))
 		{
 			pDst = &pMacTab->Entry[pMacTab->Num];
-
 
 			pDst->ApIdx = (UCHAR)pEntry->apidx;
 			COPY_MAC_ADDR(pDst->Addr, &pEntry->Addr);
@@ -3869,8 +3898,8 @@ VOID RTMPIoctlGetMacTable(
 			pDst->TxRate.word = pEntry->HTPhyMode.word;
 									
 #ifdef RTMP_RBUS_SUPPORT
-			pDst->LastRxRate = pEntry->LastRxRate;
 #if defined(RT2883) || defined(RT3883)
+			pDst->LastRxRate = pEntry->LastRxRate;
 			if (IS_RT2883(pAd) || IS_RT3883(pAd))
 			{
 				pDst->StreamSnr[0] = pEntry->BF_SNR[0];
@@ -3897,7 +3926,6 @@ VOID RTMPIoctlGetMacTable(
 	}
 
 
-/*	msg = kmalloc(sizeof(CHAR)*(MAX_LEN_OF_MAC_TABLE*MAC_LINE_LEN), MEM_ALLOC_FLAG);*/
 	os_alloc_mem(NULL, (UCHAR **)&msg, sizeof(CHAR)*(MAX_LEN_OF_MAC_TABLE*MAC_LINE_LEN));
 	if (msg == NULL)
 	{
@@ -3935,12 +3963,84 @@ VOID RTMPIoctlGetMacTable(
 	/* for compatible with old API just do the printk to console*/
 
 	DBGPRINT(RT_DEBUG_TRACE, ("%s", msg));
-/*	kfree(msg);*/
 	os_free_mem(NULL, msg);
 
 LabelOK:
 	if (pMacTab != NULL)
 		os_free_mem(NULL, pMacTab);
+}
+#define	ASSO_MAC_LINE_LEN	(1+19+4+4+4+4+8+7+7+7+10+6+6+6+6+7+7+1)
+
+VOID RTMPAPGetAssoMacTable(
+	IN PRTMP_ADAPTER pAd, 
+	IN RTMP_IOCTL_INPUT_STRUCT *wrq)
+{
+	ULONG DataRate=0;
+
+	INT i;
+	char *msg;
+
+	os_alloc_mem(NULL, (UCHAR **)&msg, sizeof(CHAR)*(MAX_LEN_OF_MAC_TABLE*ASSO_MAC_LINE_LEN));
+	if (msg == NULL)
+	{
+		DBGPRINT(RT_DEBUG_ERROR, ("%s():Alloc memory failed\n", __FUNCTION__));
+		return;
+	}
+	memset(msg, 0 ,MAX_LEN_OF_MAC_TABLE*ASSO_MAC_LINE_LEN );
+
+	sprintf(msg+strlen(msg),"\n%-19s%-4s%-4s%-4s%-4s%-8s%-7s%-7s%-7s%-10s%-6s%-6s%-6s%-6s%-7s%-7s\n",
+		   "MAC", "AID", "BSS", "PSM", "WMM", "MIMOPS", "RSSI0", "RSSI1", 
+		   "RSSI2", "PhMd", "BW", "MCS", "SGI", "STBC", "Idle", "Rate");
+	
+	for (i=0; i<MAX_LEN_OF_MAC_TABLE; i++)
+	{
+		PMAC_TABLE_ENTRY pEntry = &pAd->MacTab.Content[i];
+
+		if ((IS_ENTRY_CLIENT(pEntry) || (IS_ENTRY_APCLI(pEntry)
+#ifdef MAC_REPEATER_SUPPORT
+			&& (pEntry->bReptCli == FALSE)
+#endif /* MAC_REPEATER_SUPPORT */
+			))
+			&& (pEntry->Sst == SST_ASSOC))
+		{
+			if((strlen(msg)+ASSO_MAC_LINE_LEN ) >= (MAX_LEN_OF_MAC_TABLE*ASSO_MAC_LINE_LEN) )
+				break;
+
+			DataRate=0;
+			getRate(pEntry->HTPhyMode, &DataRate);
+			sprintf(msg+strlen(msg),"%02X:%02X:%02X:%02X:%02X:%02X  ",
+				pEntry->Addr[0], pEntry->Addr[1], pEntry->Addr[2],
+				pEntry->Addr[3], pEntry->Addr[4], pEntry->Addr[5]);
+			sprintf(msg+strlen(msg),"%-4d", (int)pEntry->Aid);
+			sprintf(msg+strlen(msg),"%-4d", (int)pEntry->apidx);
+			sprintf(msg+strlen(msg),"%-4d", (int)pEntry->PsMode);
+			sprintf(msg+strlen(msg),"%-4d", (int)CLIENT_STATUS_TEST_FLAG(pEntry, fCLIENT_STATUS_WMM_CAPABLE));
+#ifdef DOT11_N_SUPPORT
+			sprintf(msg+strlen(msg),"%-8d", (int)pEntry->MmpsMode);
+#endif /* DOT11_N_SUPPORT */
+			sprintf(msg+strlen(msg),"%-7d", pEntry->RssiSample.AvgRssi0);
+			sprintf(msg+strlen(msg),"%-7d", pEntry->RssiSample.AvgRssi1);
+			sprintf(msg+strlen(msg),"%-7d", pEntry->RssiSample.AvgRssi2);
+			sprintf(msg+strlen(msg),"%-10s", GetPhyMode(pEntry->HTPhyMode.field.MODE));
+			sprintf(msg+strlen(msg),"%-6s", GetBW(pEntry->HTPhyMode.field.BW));
+			sprintf(msg+strlen(msg),"%-6d", pEntry->HTPhyMode.field.MCS);
+			sprintf(msg+strlen(msg),"%-6d", pEntry->HTPhyMode.field.ShortGI);
+			sprintf(msg+strlen(msg),"%-6d", pEntry->HTPhyMode.field.STBC);
+			sprintf(msg+strlen(msg),"%-7d", (int)(pEntry->StaIdleTimeout - pEntry->NoDataIdleCount));
+			sprintf(msg+strlen(msg),"%-7d", (int)DataRate);
+			sprintf(msg+strlen(msg),"%-10d, %d, %d%%\n", pEntry->DebugFIFOCount, pEntry->DebugTxCount, 
+						(pEntry->DebugTxCount) ? ((pEntry->DebugTxCount-pEntry->DebugFIFOCount)*100/pEntry->DebugTxCount) : 0);
+			sprintf(msg+strlen(msg),"\n");
+		}
+	} 
+	/* for compatible with old API just do the printk to console*/
+	wrq->u.data.length = strlen(msg);
+	if (copy_to_user(wrq->u.data.pointer, msg, wrq->u.data.length))
+	{
+		DBGPRINT(RT_DEBUG_OFF, ("%s", msg));
+	}
+
+	os_free_mem(NULL, msg);
 }
 
 #ifdef INF_AR9
@@ -3953,7 +4053,6 @@ VOID RTMPAR9IoctlGetMacTable(
 	INT i;
 	char *msg;
 
-/*	msg = kmalloc(sizeof(CHAR)*(MAX_LEN_OF_MAC_TABLE*MAC_LINE_LEN), MEM_ALLOC_FLAG);*/
 	os_alloc_mem(NULL, (UCHAR **)&msg, sizeof(CHAR)*(MAX_LEN_OF_MAC_TABLE*MAC_LINE_LEN));
 	if (msg == NULL)
 	{
@@ -3994,7 +4093,6 @@ VOID RTMPAR9IoctlGetMacTable(
 		DBGPRINT(RT_DEBUG_OFF, ("%s", msg));
 	}
 
-/*	kfree(msg);*/
 	os_free_mem(NULL, msg);
 }
 
@@ -4006,8 +4104,6 @@ VOID RTMPIoctlGetSTAT2(
 	PMULTISSID_STRUCT	pMbss;
 	INT apidx;
 
-
-/*	msg = kmalloc(sizeof(CHAR)*(pAd->ApCfg.BssidNum*(14*128)), MEM_ALLOC_FLAG);*/
 	os_alloc_mem(NULL, (UCHAR **)&msg, sizeof(CHAR)*(pAd->ApCfg.BssidNum*(14*128)));
 	if (msg == NULL)
 	{
@@ -4022,21 +4118,20 @@ VOID RTMPIoctlGetSTAT2(
 		pMbss=&pAd->ApCfg.MBSSID[apidx];
 		
 		sprintf(msg+strlen(msg),"ra%d\n",apidx);
-		sprintf(msg+strlen(msg),"bytesTx = %ld\n",(pMbss->TransmittedByteCount));
-		sprintf(msg+strlen(msg),"bytesRx = %ld\n",(pMbss->ReceivedByteCount));
-		sprintf(msg+strlen(msg),"pktsTx = %ld\n",pMbss->TxCount);
-		sprintf(msg+strlen(msg),"pktsRx = %ld\n",pMbss->RxCount);
-		sprintf(msg+strlen(msg),"errorsTx = %ld\n",pMbss->TxErrorCount);
-		sprintf(msg+strlen(msg),"errorsRx = %ld\n",pMbss->RxErrorCount);
-		sprintf(msg+strlen(msg),"discardPktsTx = %ld\n",pMbss->TxDropCount);
-		sprintf(msg+strlen(msg),"discardPktsRx = %ld\n",pMbss->RxDropCount);
-		sprintf(msg+strlen(msg),"ucPktsTx = %ld\n",pMbss->ucPktsTx);
-		sprintf(msg+strlen(msg),"ucPktsRx = %ld\n",pMbss->ucPktsRx);
-		sprintf(msg+strlen(msg),"mcPktsTx = %ld\n",pMbss->mcPktsTx);
-		sprintf(msg+strlen(msg),"mcPktsRx = %ld\n",pMbss->mcPktsRx);
-		sprintf(msg+strlen(msg),"bcPktsTx = %ld\n",pMbss->bcPktsTx);
-		sprintf(msg+strlen(msg),"bcPktsRx = %ld\n",pMbss->bcPktsRx);
-		
+		sprintf(msg+strlen(msg),"bytesTx = %llu\n",pMbss->TransmittedByteCount.QuadPart);
+		sprintf(msg+strlen(msg),"bytesRx = %llu\n",pMbss->ReceivedByteCount.QuadPart);
+		sprintf(msg+strlen(msg),"pktsTx = %lu\n",pMbss->TxCount);
+		sprintf(msg+strlen(msg),"pktsRx = %lu\n",pMbss->RxCount);
+		sprintf(msg+strlen(msg),"errorsTx = %lu\n",pMbss->TxErrorCount);
+		sprintf(msg+strlen(msg),"errorsRx = %lu\n",pMbss->RxErrorCount);
+		sprintf(msg+strlen(msg),"discardPktsTx = %lu\n",pMbss->TxDropCount);
+		sprintf(msg+strlen(msg),"discardPktsRx = %lu\n",pMbss->RxDropCount);
+		sprintf(msg+strlen(msg),"ucPktsTx = %lu\n",pMbss->ucPktsTx);
+		sprintf(msg+strlen(msg),"ucPktsRx = %lu\n",pMbss->ucPktsRx);
+		sprintf(msg+strlen(msg),"mcPktsTx = %lu\n",pMbss->mcPktsTx);
+		sprintf(msg+strlen(msg),"mcPktsRx = %lu\n",pMbss->mcPktsRx);
+		sprintf(msg+strlen(msg),"bcPktsTx = %lu\n",pMbss->bcPktsTx);
+		sprintf(msg+strlen(msg),"bcPktsRx = %lu\n",pMbss->bcPktsRx);
 	}
 
 	wrq->u.data.length = strlen(msg);
@@ -4045,7 +4140,6 @@ VOID RTMPIoctlGetSTAT2(
 		DBGPRINT(RT_DEBUG_OFF, ("%s", msg));
 	}
 
-/*	kfree(msg);*/
 	os_free_mem(NULL, msg);
 }
 
@@ -4059,7 +4153,6 @@ VOID RTMPIoctlGetRadioDynInfo(
 	INT status,bandwidth,ShortGI;
 	
 
-/*	msg = kmalloc(sizeof(CHAR)*(4096), MEM_ALLOC_FLAG);*/
 	os_alloc_mem(NULL, (UCHAR **)&msg, sizeof(CHAR)*(4096));
 	if (msg == NULL)
 	{
@@ -4101,7 +4194,6 @@ VOID RTMPIoctlGetRadioDynInfo(
 		DBGPRINT(RT_DEBUG_OFF, ("%s", msg));
 	}
 
-/*	kfree(msg);*/
 	os_free_mem(NULL, msg);
 }
 #endif/*CONFIG_AP_SUPPORT*/
@@ -6518,7 +6610,7 @@ INT	Show_ModuleTxpower_Proc(
  		return FALSE;
  
  	ifIndex = pObj->ioctl_if;
-
+ 	
 #ifdef MAC_REPEATER_SUPPORT
 	if (pAd->ApCfg.bMACRepeaterEn)
 		MaxWcidNum = MAX_MAC_TABLE_SIZE_WITH_REPEATER;
@@ -6534,7 +6626,12 @@ INT	Show_ModuleTxpower_Proc(
  
  			if ( IS_ENTRY_APCLI(pEntry)
 				&& (pEntry->Sst == SST_ASSOC)
-				&& (pEntry->PortSecured == WPA_802_1X_PORT_SECURED))
+				&& (pEntry->PortSecured == WPA_802_1X_PORT_SECURED)
+#ifdef MAC_REPEATER_SUPPORT
+				&& (pEntry->bReptCli == FALSE)
+				&& (pEntry->bReptEthCli == FALSE)
+#endif /* MAC_REPEATER_SUPPORT */
+				)
  				{
  					DBGPRINT(RT_DEBUG_OFF, ("ApCli%d Connected AP : %02X:%02X:%02X:%02X:%02X:%02X   SSID:%s\n",ifIndex,
  						pEntry->Addr[0], pEntry->Addr[1], pEntry->Addr[2],

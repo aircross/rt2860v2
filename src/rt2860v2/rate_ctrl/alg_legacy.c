@@ -149,7 +149,7 @@ VOID APMlmeDynamicTxRateSwitching(
 						HwErrRatio = 0;
 
 					DBGPRINT(RT_DEBUG_TRACE | DBG_FUNC_RA,
-							("%s():Aid:%d, MCS:%d, CuTxRaIdx=%d,TxErrRatio(Hw:%d-%d%%, Sw:%d-%d%%)\n", 
+							("%s():Aid:%d, MCS:%d, CuTxRaIdx=%d,TxErrRatio(Hw:%ld-%ld%%, Sw:%ld-%ld%%)\n", 
 							__FUNCTION__, pEntry->Aid, pEntry->HTPhyMode.field.MCS,
 							pEntry->CurrTxRateIndex,
 							HwTxCnt, HwErrRatio, TxTotalCnt, TxErrorRatio));
@@ -171,6 +171,13 @@ VOID APMlmeDynamicTxRateSwitching(
 		/* different calculation in APQuickResponeForRateUpExec() */
 		/* Rssi = RTMPMaxRssi(pAd, (CHAR)pEntry->RssiSample.AvgRssi0, (CHAR)pEntry->RssiSample.AvgRssi1, (CHAR)pEntry->RssiSample.AvgRssi2); */
 		Rssi = RTMPAvgRssi(pAd, &pEntry->RssiSample);
+
+#ifdef THERMAL_PROTECT_SUPPORT
+		if (pAd->force_one_tx_stream == TRUE) {
+			if (pEntry->CurrTxRateIndex > 0x0b)
+				pEntry->CurrTxRateIndex = TableSize - 1;
+		}
+#endif /* THERMAL_PROTECT_SUPPORT */
 
 		CurrRateIdx = UpRateIdx = DownRateIdx = pEntry->CurrTxRateIndex;
 
@@ -600,6 +607,13 @@ VOID APQuickResponeForRateUpExec(
 			}
 #endif /* FIFO_EXT_SUPPORT */
 		}
+
+#ifdef THERMAL_PROTECT_SUPPORT
+		if (pAd->force_one_tx_stream == TRUE) {
+			if (pEntry->CurrTxRateIndex > 0x0b)
+				pEntry->CurrTxRateIndex = TableSize - 1;
+		}
+#endif /* THERMAL_PROTECT_SUPPORT */
 
 		CurrRateIdx = pEntry->CurrTxRateIndex;
 #ifdef TXBF_SUPPORT
@@ -1848,4 +1862,11 @@ VOID MlmeOldRateAdapt(
 		/* Update PHY rate */
 		MlmeNewTxRate(pAd, pEntry);
 	}
+
+#ifdef THERMAL_PROTECT_SUPPORT
+	if ((pAd->force_one_tx_stream == TRUE) &&
+		(pEntry->LastSecTxRateChangeAction == RATE_NO_CHANGE)) {
+		MlmeNewTxRate(pAd, pEntry);
+	}
+#endif /* THERMAL_PROTECT_SUPPORT */
 }

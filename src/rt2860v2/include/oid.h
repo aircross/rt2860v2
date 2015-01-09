@@ -66,8 +66,11 @@
 /*#define MAX_NUM_OF_CHS					49 */ /* 14 channels @2.4G +  12@UNII + 4 @MMAC + 11 @HiperLAN2 + 7 @Japan + 1 as NULL terminationc */
 /*#define MAX_NUM_OF_CHS             		54 */ /* 14 channels @2.4G +  12@UNII(lower/middle) + 16@HiperLAN2 + 11@UNII(upper) + 0 @Japan + 1 as NULL termination */
 #define MAX_NUMBER_OF_EVENT				10	/* entry # in EVENT table */
-#define MAX_NUMBER_OF_MAC				32	/* if MAX_MBSSID_NUM is 8, this value can't be larger than 211 */
-
+#if (CONFIG_RALINK_RAM_SIZE > 32)
+#define MAX_NUMBER_OF_MAC				64	/* if MAX_MBSSID_NUM is 8, this value can't be larger than 211 */
+#else
+#define MAX_NUMBER_OF_MAC				32
+#endif
 #define MAX_NUMBER_OF_ACL				64
 #define MAX_LENGTH_OF_SUPPORT_RATES		12	/* 1, 2, 5.5, 11, 6, 9, 12, 18, 24, 36, 48, 54 */
 #define MAX_NUMBER_OF_DLS_ENTRY			4
@@ -135,6 +138,18 @@
 #define OID_802_11_MIC_FAILURE_REPORT_FRAME         0x0528
 #define OID_802_11_EAP_METHOD						0x0529
 #define OID_802_11_ACL_LIST							0x052A
+
+#define OID_802_11_PASSPHRASE						0x052B
+#define OID_802_11_CHANNEL_WIDTH					0x052C
+#define OID_802_11_BEACON_PERIOD					0x052D
+#define OID_802_11_HT_STBC							0x052E
+#define OID_802_11_UAPSD							0x052F
+#define OID_802_11_COEXISTENCE					0x0530
+#define OID_802_11_AMSDU							0x0531
+#define OID_802_11_AMPDU							0x0532
+#define OID_802_11_APCFG							0x0533
+
+#define OID_802_11_ASSOLIST						0x0534
 
 /* For 802.1x daemin using */
 #ifdef DOT1X_SUPPORT
@@ -632,6 +647,11 @@ typedef enum _NDIS_802_11_AUTHENTICATION_MODE {
 
 typedef UCHAR NDIS_802_11_RATES[NDIS_802_11_LENGTH_RATES];	/* Set of 8 data rates */
 typedef UCHAR NDIS_802_11_RATES_EX[NDIS_802_11_LENGTH_RATES_EX];	/* Set of 16 data rates */
+typedef struct GNU_PACKED _NDIS80211PSK
+{
+	UINT    WPAKeyLen;
+	UCHAR   WPAKey[64];
+} NDIS80211PSK;
 
 typedef struct GNU_PACKED _NDIS_802_11_SSID {
 	UINT SsidLength;	/* length of SSID field below, in bytes; */
@@ -951,6 +971,10 @@ typedef struct _NDIS_802_11_CAPABILITY {
 #endif /* CONFIG_AP_SUPPORT */
 #endif /* LLTD_SUPPORT */
 
+#ifdef CON_WPS
+#define RT_OID_WSC_SET_CON_WPS_STOP                 0x0764
+#endif /* CON_WPS */
+
 
 
 
@@ -1071,11 +1095,11 @@ typedef struct _RT_802_11_MAC_ENTRY {
 	UINT32 ConnectedTime;
 	MACHTTRANSMIT_SETTING TxRate;
 #ifdef RTMP_RBUS_SUPPORT
+#if defined (RT2883) || defined (RT3883)
 	UINT32		LastRxRate;
 	SHORT		StreamSnr[3];				/* BF SNR from RXWI. Units=0.25 dB. 22 dB offset removed */
 	SHORT		SoundingRespSnr[3];			/* SNR from Sounding Response. Units=0.25 dB. 22 dB offset removed */
-/*	SHORT		TxPER;	*/					/* TX PER over the last second. Percent */
-/*	SHORT		reserved;*/
+#endif
 #endif /* RTMP_RBUS_SUPPORT */
 } RT_802_11_MAC_ENTRY, *PRT_802_11_MAC_ENTRY;
 

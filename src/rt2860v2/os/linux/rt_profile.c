@@ -159,7 +159,6 @@ NDIS_STATUS	RTMPReadParametersHook(
 	int i;
 #endif /*HOSTAPD_SUPPORT */
 
-/*	buffer = kmalloc(MAX_INI_BUFFER_SIZE, MEM_ALLOC_FLAG); */
 	os_alloc_mem(pAd, (UCHAR **)&buffer, MAX_INI_BUFFER_SIZE);
 	if(buffer == NULL)
 		return NDIS_STATUS_FAILURE;
@@ -337,7 +336,6 @@ VOID RtmpDrvSendWirelessEvent(
 	}	
  
 	/*Allocate memory and copy the msg. */
-/*	if((pBuf = kmalloc(IW_CUSTOM_MAX_LEN, GFP_ATOMIC)) != NULL) */
 	os_alloc_mem(NULL, (UCHAR **)&pBuf, IW_CUSTOM_MAX_LEN);
 	if(pBuf != NULL)
 	{
@@ -514,27 +512,18 @@ void tbtt_tasklet(unsigned long data)
 
 
 void announce_802_3_packet(
-	IN	VOID			*pAdSrc,
-	IN	PNDIS_PACKET	pPacket,
-	IN	UCHAR			OpMode)
+	IN	VOID		*pAdSrc,
+	IN	PNDIS_PACKET	pNetPkt,
+	IN	UCHAR		OpMode)
 {
-	PRTMP_ADAPTER	pAd = (PRTMP_ADAPTER)pAdSrc;
-/*	struct sk_buff	*pRxPkt; */
-	PNDIS_PACKET pRxPkt;
-#ifdef INF_PPA_SUPPORT
-        int             ret = 0;
-        unsigned int ppa_flags = 0; /* reserved for now */
-#endif /* INF_PPA_SUPPORT */
+	PRTMP_ADAPTER pAd = (RTMP_ADAPTER *)pAdSrc;
+	struct sk_buff *pRxPkt;
 
-	pAd = pAd; /* avoid compile warning */
+	ASSERT(pNetPkt);
+	MEM_DBG_PKT_FREE_INC(pNetPkt);
 
-	MEM_DBG_PKT_FREE_INC(pPacket);
+	pRxPkt = RTPKT_TO_OSPKT(pNetPkt);
 
-
-	ASSERT(pPacket);
-
-/*	pRxPkt = RTPKT_TO_OSPKT(pPacket); */
-	pRxPkt = pPacket;
 #ifdef CONFIG_AP_SUPPORT
 #ifdef APCLI_SUPPORT
 #ifdef P2P_SUPPORT
@@ -543,9 +532,9 @@ void announce_802_3_packet(
 	IF_DEV_CONFIG_OPMODE_ON_AP(pAd)
 #endif /* P2P_SUPPORT */
 	{
-		if (RTMP_MATPktRxNeedConvert(pAd, RtmpOsPktNetDevGet(pRxPkt)))
+		if (RTMP_MATPktRxNeedConvert(pAd, pRxPkt->dev))
 		{
-			RTMP_MATEngineRxHandle(pAd, pRxPkt, 0);
+			RTMP_MATEngineRxHandle(pAd, pNetPkt, 0);
 		}
 	}
 #endif /* APCLI_SUPPORT */
@@ -557,104 +546,63 @@ void announce_802_3_packet(
     /* Push up the protocol stack */
 #ifdef CONFIG_AP_SUPPORT
 #if defined(PLATFORM_BL2348) || defined(PLATFORM_BL23570)
-
 {
 	extern int (*pToUpperLayerPktSent)(PNDIS_PACKET *pSkb);
-/*	pRxPkt->protocol = eth_type_trans(pRxPkt, pRxPkt->dev); */
-	RtmpOsPktProtocolAssign(pRxPkt);
-	pToUpperLayerPktSent(pRxPkt);
+	pRxPkt->protocol = eth_type_trans(pRxPkt, pRxPkt->dev);
+	pToUpperLayerPktSent(pNetPkt);
 	return;
 }
 #endif /* PLATFORM_BL2348 */
 #endif /* CONFIG_AP_SUPPORT */
 
 #ifdef IKANOS_VX_1X0
-	IKANOS_DataFrameRx(pAd, pRxPkt);
+	IKANOS_DataFrameRx(pAd, pNetPkt);
 	return;
 #endif /* IKANOS_VX_1X0 */
-
-
-	/* mark for bridge fast path, 2009/06/22 */
-	/* pRxPkt->protocol = eth_type_trans(pRxPkt, pRxPkt->dev); */
 
 #ifdef INF_PPA_SUPPORT
 	if (ppa_hook_directpath_send_fn && pAd->PPAEnable==TRUE ) 
 	{
-		RtmpOsPktInfPpaSend(pRxPkt);
-
-		pRxPkt=NULL;
+		RtmpOsPktInfPpaSend(pNetPkt);
 		return;
-
-	}	  	
+	}
 #endif /* INF_PPA_SUPPORT */
 
-#ifdef RTMP_RBUS_SUPPORT
-	if (pAd->infType == RTMP_DEV_INF_RBUS)
-	{
 #ifdef CONFIG_RT2880_BRIDGING_ONLY
-		/*	pRxPkt->cb[22]=0xa8; */
-		PACKET_CB_ASSIGN(pRxPkt, 22) = 0xa8;
+	PACKET_CB_ASSIGN(pNetPkt, 22) = 0xa8;
 #endif
 
-#if defined(CONFIG_RA_CLASSIFIER)||defined(CONFIG_RA_CLASSIFIER_MODULE)
-		if(ra_classifier_hook_rx!= NULL)
+#if defined (CONFIG_RA_HW_NAT) || defined (CONFIG_RA_HW_NAT_MODULE)
+#if !defined (CONFIG_RA_NAT_NONE)
+	/*
+	 * ra_sw_nat_hook_rx return 1 --> continue
+	 * ra_sw_nat_hook_rx return 0 --> FWD & without netif_rx
+	*/
+	if (ra_sw_nat_hook_rx != NULL)
+	{
+		pRxPkt->protocol = eth_type_trans(pRxPkt, pRxPkt->dev);
+		FOE_MAGIC_TAG(pRxPkt) = FOE_MAGIC_EXTIF;
+		if (ra_sw_nat_hook_rx(pRxPkt))
 		{
-			unsigned int flags;
-			
-			RTMP_IRQ_LOCK(&pAd->page_lock, flags);
-			ra_classifier_hook_rx(pRxPkt, classifier_cur_cycle);
-			RTMP_IRQ_UNLOCK(&pAd->page_lock, flags);
+			FOE_MAGIC_TAG(pRxPkt) = 0;
+			netif_rx(pRxPkt);
 		}
-#endif /* CONFIG_RA_CLASSIFIER */
-
-#if !defined(CONFIG_RA_NAT_NONE)
-		/* bruce+
-		  * ra_sw_nat_hook_rx return 1 --> continue
-		  * ra_sw_nat_hook_rx return 0 --> FWD & without netif_rx
-		 */
-		if (ra_sw_nat_hook_rx!= NULL)
-		{
-			unsigned int flags;
-
-#if defined (CONFIG_RA_HW_NAT)  || defined (CONFIG_RA_HW_NAT_MODULE)
-			RtmpOsPktNatMagicTag(pRxPkt);
-#endif
-
-			/*	pRxPkt->protocol = eth_type_trans(pRxPkt, pRxPkt->dev); */
-			RtmpOsPktProtocolAssign(pRxPkt);
-
-			RTMP_IRQ_LOCK(&pAd->page_lock, flags);
-			if(ra_sw_nat_hook_rx(pRxPkt)) 
-			{
-				RtmpOsPktRcvHandle(pRxPkt);
-			}
-			RTMP_IRQ_UNLOCK(&pAd->page_lock, flags);
-			return;
-		}
-#else
-		{
-#if defined (CONFIG_RA_HW_NAT)  || defined (CONFIG_RA_HW_NAT_MODULE)
-		RtmpOsPktNatNone(pRxPkt);
-#endif /* CONFIG_RA_HW_NAT */
-		}
-#endif /* CONFIG_RA_NAT_NONE */
+		
+		return;
 	}
-#endif /* RTMP_RBUS_SUPPORT */
+#endif
+#endif
 
-	
 #ifdef CONFIG_AP_SUPPORT
 #ifdef BG_FT_SUPPORT
-		if (BG_FTPH_PacketFromApHandle(pRxPkt) == 0)
-			return;
+	if (BG_FTPH_PacketFromApHandle(pNetPkt) == 0)
+		return;
 #endif /* BG_FT_SUPPORT */
 #endif /* CONFIG_AP_SUPPORT */
 
-/*		pRxPkt->protocol = eth_type_trans(pRxPkt, pRxPkt->dev); */
-		RtmpOsPktProtocolAssign(pRxPkt);
-		RtmpOsPktRcvHandle(pRxPkt);
-	
+	pRxPkt->protocol = eth_type_trans(pRxPkt, pRxPkt->dev);
+	netif_rx(pRxPkt);
 }
-
 
 #ifdef CONFIG_STA_SUPPORT
 void STA_MonPktSend(
@@ -785,11 +733,6 @@ VOID	RTMPFreeAdapter(
 		os_free_mem(NULL, pAd->iw_stats);
 		pAd->iw_stats = NULL;
 	}
-	if (pAd->stats)
-	{
-		os_free_mem(NULL, pAd->stats);
-		pAd->stats = NULL;
-	}
 
 	NdisFreeSpinLock(&TimerSemLock);
 
@@ -818,7 +761,6 @@ int	RTMPSendPackets(
 {
 	PRTMP_ADAPTER pAd = (PRTMP_ADAPTER)MiniportAdapterContext;
 	PNDIS_PACKET pPacket = ppPacketArray[0];
-
 
 	INC_COUNTER64(pAd->WlanCounters.TransmitCountFrmOs);
 
@@ -855,24 +797,20 @@ int	RTMPSendPackets(
 		return 0;
 	}
 
-#if !defined(CONFIG_RA_NAT_NONE)
-	/* bruce+ */
-	if(ra_sw_nat_hook_tx!= NULL)
+#if defined (CONFIG_RA_HW_NAT) || defined (CONFIG_RA_HW_NAT_MODULE)
+#if !defined (CONFIG_RA_NAT_NONE)
+	if (ra_sw_nat_hook_tx != NULL)
 	{
-		unsigned long flags;
-
-		RTMP_INT_LOCK(&pAd->page_lock, flags);
-		ra_sw_nat_hook_tx(pPacket);
-		RTMP_INT_UNLOCK(&pAd->page_lock, flags);
+		ra_sw_nat_hook_tx(pPacket, 0);
 	}
 #endif
+#endif
 
-	RTMP_SET_PACKET_5VT(pPacket, 0);
-/*	MiniportMMRequest(pAd, pkt->data, pkt->len); */
 #ifdef CONFIG_5VT_ENHANCE
-    if (*(int*)(GET_OS_PKT_CB(pPacket)) == BRIDGE_TAG) {
+	RTMP_SET_PACKET_5VT(pPacket, 0);
+	if (*(int*)(GET_OS_PKT_CB(pPacket)) == BRIDGE_TAG) {
 		RTMP_SET_PACKET_5VT(pPacket, 1);
-    }
+	}
 #endif
 
 #ifdef CONFIG_AP_SUPPORT
@@ -989,9 +927,9 @@ INT RTMP_AP_IoctlPrepare(
 
 
 	pObj = (POS_COOKIE) pAd->OS_Cookie;
-	
-    if((pConfig->priv_flags == INT_MAIN) && !RTMP_TEST_FLAG(pAd, fRTMP_ADAPTER_INTERRUPT_IN_USE))
-    {
+
+	if((pConfig->priv_flags == INT_MAIN) && !RTMP_TEST_FLAG(pAd, fRTMP_ADAPTER_INTERRUPT_IN_USE))
+	{
 		if (pConfig->pCmdData == NULL)
 			return Status;
 		
@@ -1012,46 +950,40 @@ INT RTMP_AP_IoctlPrepare(
 		}
 		else
 			return -ENETDOWN;
-    }
+	}
 
-    /* determine this ioctl command is comming from which interface. */
-    if (pConfig->priv_flags == INT_MAIN)
-    {
+	/* determine this ioctl command is comming from which interface. */
+	if (pConfig->priv_flags == INT_MAIN)
+	{
 		pObj->ioctl_if_type = INT_MAIN;
-        pObj->ioctl_if = MAIN_MBSSID;
-/*        DBGPRINT(RT_DEBUG_INFO, ("rt28xx_ioctl I/F(ra%d)(flags=%d): cmd = 0x%08x\n", pObj->ioctl_if, RT_DEV_PRIV_FLAGS_GET(net_dev), cmd)); */
-    }
-    else if (pConfig->priv_flags == INT_MBSSID)
-    {
+		pObj->ioctl_if = MAIN_MBSSID;
+	}
+	else if (pConfig->priv_flags == INT_MBSSID)
+	{
 		pObj->ioctl_if_type = INT_MBSSID;
-/*    	if (!RTMPEqualMemory(net_dev->name, pAd->net_dev->name, 3))  // for multi-physical card, no MBSSID */
 		if (strcmp(pConfig->name, RtmpOsGetNetDevName(pAd->net_dev)) != 0) /* sample */
-    	{
-	        for (index = 1; index < pAd->ApCfg.BssidNum; index++)
-	    	{
-	    	    if (pAd->ApCfg.MBSSID[index].MSSIDDev == pConfig->net_dev)
-	    	    {
-	    	        pObj->ioctl_if = index;
-	    	        
-/*	    	        DBGPRINT(RT_DEBUG_INFO, ("rt28xx_ioctl I/F(ra%d)(flags=%d): cmd = 0x%08x\n", index, RT_DEV_PRIV_FLAGS_GET(net_dev), cmd)); */
-	    	        break;
-	    	    }
-	    	}
-	        /* Interface not found! */
-	        if(index == pAd->ApCfg.BssidNum)
-	        {
-/*	        	DBGPRINT(RT_DEBUG_ERROR, ("rt28xx_ioctl can not find I/F\n")); */
-	            return -ENETDOWN;
-	        }
-	    }
-	    else    /* ioctl command from I/F(ra0) */
-	    {
+		{
+			for (index = 1; index < pAd->ApCfg.BssidNum; index++)
+			{
+				if (pAd->ApCfg.MBSSID[index].MSSIDDev == pConfig->net_dev)
+				{
+					pObj->ioctl_if = index;
+					break;
+				}
+			}
+			/* Interface not found! */
+			if(index == pAd->ApCfg.BssidNum)
+			{
+				return -ENETDOWN;
+			}
+		}
+		else    /* ioctl command from I/F(ra0) */
+		{
 /*			GET_PAD_FROM_NET_DEV(pAd, net_dev); */
-    	    pObj->ioctl_if = MAIN_MBSSID;
-/*	        DBGPRINT(RT_DEBUG_ERROR, ("rt28xx_ioctl can not find I/F and use default: cmd = 0x%08x\n", cmd)); */
-	    }
-        MBSS_MR_APIDX_SANITY_CHECK(pAd, pObj->ioctl_if);
-    }
+			pObj->ioctl_if = MAIN_MBSSID;
+		}
+		MBSS_MR_APIDX_SANITY_CHECK(pAd, pObj->ioctl_if);
+	}
 #ifdef WDS_SUPPORT
 	else if (pConfig->priv_flags == INT_WDS)
 	{
@@ -1061,7 +993,6 @@ INT RTMP_AP_IoctlPrepare(
 			if (pAd->WdsTab.WdsEntry[index].dev == pConfig->net_dev)
 			{
 				pObj->ioctl_if = index;
-
 				break;
 			}
 			
@@ -1102,11 +1033,10 @@ INT RTMP_AP_IoctlPrepare(
 		pObj->ioctl_if = MAIN_MBSSID;
 	}
 #endif /* P2P_SUPPORT */
-    else
-    {
-/*    	DBGPRINT(RT_DEBUG_WARN, ("IOCTL is not supported in WDS interface\n")); */
-    	return -EOPNOTSUPP;
-    }
+	else
+	{
+		return -EOPNOTSUPP;
+	}
 
 	pConfig->apidx = pObj->ioctl_if;
 	return Status;

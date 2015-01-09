@@ -315,16 +315,18 @@ TX_POWER_TUNING_ENTRY_STRUCT RT3352_TxPowerTuningTable[] =
 };
 
 /* The desired TSSI over CCK */
-CHAR desiredTSSIOverCCK[4] = {0};
+extern CHAR desiredTSSIOverCCK[4];
 
 /* The desired TSSI over OFDM */
-CHAR desiredTSSIOverOFDM[8] = {0};
+extern CHAR desiredTSSIOverOFDM[8];
 
 /* The desired TSSI over HT */
-CHAR desiredTSSIOverHT[16] = {0};
+extern CHAR desiredTSSIOverHT[16];
 
 /* The desired TSSI over HT using STBC */
-CHAR desiredTSSIOverHTUsingSTBC[8] = {0};
+extern CHAR desiredTSSIOverHTUsingSTBC[8];
+
+VOID RT3352_AsicInitDesiredTSSITable(IN PRTMP_ADAPTER pAd);
 #endif /* RTMP_INTERNAL_TX_ALC */
 
 /*
@@ -388,8 +390,8 @@ VOID RT3352_Init(
 	pChipOps->AsicMacInit = NICInitRT3352MacRegisters;
 
 #ifdef GREENAP_SUPPORT
-	pChipOps->EnableAPMIMOPS = RT3352_EnableAPMIMOPS;
-	pChipOps->DisableAPMIMOPS = RT3352_DisableAPMIMOPS;
+	pChipOps->EnableAPMIMOPS = EnableAPMIMOPSv1;
+	pChipOps->DisableAPMIMOPS = DisableAPMIMOPSv1;
 #endif /* GREENAP_SUPPORT */
 
 	pChipOps->RxSensitivityTuning = RT3352_RxSensitivityTuning;
@@ -407,10 +409,6 @@ VOID RT3352_Init(
 #ifdef RTMP_INTERNAL_TX_ALC
 	pChipOps->InitDesiredTSSITable = RT3352_AsicInitDesiredTSSITable;
 #endif /* RTMP_INTERNAL_TX_ALC */
-#ifdef GREENAP_SUPPORT
-	pChipOps->EnableAPMIMOPS = EnableAPMIMOPSv2;
-	pChipOps->DisableAPMIMOPS = DisableAPMIMOPSv2;
-#endif /* GREENAP_SUPPORT */
 	RtmpChipBcnSpecInit(pAd);
 }
 
@@ -624,221 +622,10 @@ VOID NICInitRT3352RFRegisters(
 	}
 }
 
-
-#ifdef GREENAP_SUPPORT
-extern REG_PAIR RT305x_RFRegTable[];
-
-VOID RT3352_EnableAPMIMOPS(
-	IN PRTMP_ADAPTER			pAd,
-	IN BOOLEAN					ReduceCorePower)
-{
-	UCHAR	BBPR3 = 0,BBPR1 = 0;
-	ULONG	TxPinCfg = 0x00050F0A;//Gary 2007/08/09 0x050A0A
-	UCHAR	BBPR4=0;
-
-	UCHAR	CentralChannel;
-	//UINT32	Value=0;
-
-#ifdef RT305x
-	UCHAR 	RFValue=0;
-		
-	RT30xxReadRFRegister(pAd, RF_R01, &RFValue);
-	RFValue &= 0x03;	//clear bit[7~2]
-	RFValue |= 0x3C; // default 2Tx 2Rx
-	// turn off tx1
-	RFValue &= ~(0x1 << 5);
-	// turn off rx1
-	RFValue &= ~(0x1 << 4);
-	// Turn off unused PA or LNA when only 1T or 1R
-#endif // RT305x //
-
-	if(pAd->CommonCfg.Channel>14)
-		TxPinCfg=0x00050F05;
-		
-	TxPinCfg &= 0xFFFFFFF3;
-	TxPinCfg &= 0xFFFFF3FF;
-	pAd->ApCfg.bGreenAPActive=TRUE;
-
-	CentralChannel = pAd->CommonCfg.CentralChannel;
-	DBGPRINT(RT_DEBUG_INFO, ("Run with BW_20\n"));
-	pAd->CommonCfg.CentralChannel = pAd->CommonCfg.Channel;
-	CentralChannel = pAd->CommonCfg.Channel;
-	/* Set BBP registers to BW20 */
-	RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R4, &BBPR4);
-	BBPR4 &= (~0x18);
-	RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R4, BBPR4);
-	/* RF Bandwidth related registers would be set in AsicSwitchChannel() */
-	pAd->CommonCfg.BBPCurrentBW = BW_20;
-	if (pAd->Antenna.field.RxPath>1||pAd->Antenna.field.TxPath>1)
-	{
-		//TX Stream
-	RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R1, &BBPR1);
-		//Rx Stream
-		RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R3, &BBPR3);
-		
-		
-	BBPR3 &= (~0x18);
-	BBPR1 &= (~0x18);
-
-	RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R1, BBPR1);
-
-#ifdef RT3352
-	/*
-		For power saving purpose, Gary set BBP_R3[7:6]=11 to save more power
-		and he also rewrote the description about BBP_R3 to point out the
-		WiFi driver should modify BBP_R3[5] based on Low/High frequency
-		channel.(not a fixed value).
-	*/
-	BBPR3 |= 0xe0;	//bit 6 & 7, i.e. Use 5-bit ADC for Acquisition
-#endif // RT3352 //
-
-		RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R3, BBPR3);
-		
-	RTMP_IO_WRITE32(pAd, TX_PIN_CFG, TxPinCfg);
-
-#ifdef RT305x
-	RT30xxWriteRFRegister(pAd, RF_R01, RFValue);
-#endif // RT305x //
-	}
-	AsicSwitchChannel(pAd, CentralChannel, FALSE);
-
-	DBGPRINT(RT_DEBUG_INFO, ("EnableAPMIMOPS, 305x/28xx changes the # of antenna to 1\n"));
-}
-
-
-VOID RT3352_DisableAPMIMOPS(
-	IN PRTMP_ADAPTER			pAd)
-{
-	UCHAR	BBPR3=0,BBPR1=0;
-	ULONG	TxPinCfg = 0x00050F0A;//Gary 2007/08/09 0x050A0A
-
-	UCHAR	CentralChannel;
-	UINT32	Value=0;
-
-#ifdef RT305x
-	UCHAR 	RFValue=0;
-
-	RT30xxReadRFRegister(pAd, RF_R01, &RFValue);
-	RFValue &= 0x03;	//clear bit[7~2]
-	RFValue |= 0x3C; // default 2Tx 2Rx
-#endif // RT305x //
-
-	if(pAd->CommonCfg.Channel>14)
-		TxPinCfg=0x00050F05;
-	// Turn off unused PA or LNA when only 1T or 1R
-	if (pAd->Antenna.field.TxPath == 1)
-	{
-		TxPinCfg &= 0xFFFFFFF3;
-	}
-	if (pAd->Antenna.field.RxPath == 1)
-	{
-		TxPinCfg &= 0xFFFFF3FF;
-	}
-
-
-	pAd->ApCfg.bGreenAPActive=FALSE;
-	if ((pAd->CommonCfg.HtCapability.HtCapInfo.ChannelWidth == BW_40) && (pAd->CommonCfg.Channel != 14))
-		{
-			DBGPRINT(RT_DEBUG_INFO, ("Run with BW_40\n"));
-			/* Set CentralChannel to work for BW40 */
-		if (pAd->CommonCfg.RegTransmitSetting.field.EXTCHA == EXTCHA_ABOVE)
-		{
-				pAd->CommonCfg.CentralChannel = pAd->CommonCfg.Channel + 2;
-		
-			//  TX : control channel at lower 
-			RTMP_IO_READ32(pAd, TX_BAND_CFG, &Value);
-			Value &= (~0x1);
-			RTMP_IO_WRITE32(pAd, TX_BAND_CFG, Value);
-
-			//  RX : control channel at lower 
-			RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R3, &Value);
-			Value &= (~0x20);
-			RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R3, Value);
-		}
-		else if ((pAd->CommonCfg.Channel > 2) && (pAd->CommonCfg.RegTransmitSetting.field.EXTCHA == EXTCHA_BELOW)) 
-		{
-			pAd->CommonCfg.CentralChannel = pAd->CommonCfg.Channel - 2;
-			
-			//  TX : control channel at upper 
-			RTMP_IO_READ32(pAd, TX_BAND_CFG, &Value);
-			Value |= (0x1);		
-			RTMP_IO_WRITE32(pAd, TX_BAND_CFG, Value);
-			
-			//  RX : control channel at upper 
-			RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R3, &Value);
-			Value |= (0x20);
-			RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R3, Value);
-		}
-		CentralChannel = pAd->CommonCfg.CentralChannel;
-
-		/* Set BBP registers to BW40 */
-		RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R4, &Value);
-		Value &= (~0x18);
-		Value |= 0x10;
-		RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R4, Value);
-		/* RF Bandwidth related registers would be set in AsicSwitchChannel() */
-		pAd->CommonCfg.BBPCurrentBW = BW_40;
-		AsicSwitchChannel(pAd, CentralChannel, FALSE);
-	}
-	//Rx Stream
-	RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R1, &BBPR1);
-	//Tx Stream
-	RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R3, &BBPR3);
-	BBPR3 &= (~0x18);
-
-	//RX Stream
-	if(pAd->Antenna.field.RxPath == 3)
-	{
-		BBPR3 |= (0x10);
-	}
-	else if(pAd->Antenna.field.RxPath == 2)
-	{
-		BBPR3 |= (0x8);
-	}
-	else if(pAd->Antenna.field.RxPath == 1)
-	{
-		BBPR3 |= (0x0);
-	}
-
-	//Tx Stream
-	if ((pAd->CommonCfg.PhyMode >= PHY_11ABGN_MIXED) && (pAd->Antenna.field.TxPath == 2))
-	{
-		BBPR1 &= (~0x18);
-		BBPR1 |= 0x10;
-	}
-	else
-	{
-		BBPR1 &= (~0x18);
-	}
-
-#ifdef RT3352
-	/*
-		For power saving purpose, Gary set BBP_R3[7:6]=11 to save more power
-		and he also rewrote the description about BBP_R3 to point out the
-		WiFi driver should modify BBP_R3[5] based on Low/High frequency
-		channel.(not a fixed value).
-	*/
-	BBPR3 &= (~0xe0);	//bit 6 & 7, i.e. Use 5-bit ADC for Acquisition
-#endif // RT3352 //
-
-	RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R3, BBPR3);
-	RTMP_BBP_IO_WRITE8_BY_REG_ID(pAd, BBP_R1, BBPR1);
-	RTMP_IO_WRITE32(pAd, TX_PIN_CFG, TxPinCfg);
-
-#ifdef RT305x
-	RT30xxWriteRFRegister(pAd, RF_R01, RFValue);
-#endif // RT305x //
-
-	DBGPRINT(RT_DEBUG_INFO, ("DisableAPMIMOPS, 305x/28xx reserve only one antenna\n"));
-}
-#endif // GREENAP_SUPPORT //
-
-
 VOID RT3352_RxSensitivityTuning(
 	IN PRTMP_ADAPTER			pAd)
 {
 	UCHAR R66;
-
 
 	R66 = 0x26 + GET_LNA_GAIN(pAd);
 #ifdef RALINK_ATE
@@ -1114,7 +901,6 @@ VOID RT3352_ChipBBPAdjust(
 	}	
 }
 
-
 VOID RT3352_ChipSwitchChannel(
 	IN PRTMP_ADAPTER 			pAd,
 	IN UCHAR					Channel,
@@ -1188,13 +974,7 @@ VOID RT3352_ChipSwitchChannel(
 					RFValue = 0x00;
 					RT30xxWriteRFRegister(pAd, RF_R13, (UCHAR)RFValue);
 					RT30xxReadRFRegister(pAd, RF_R30, (PUCHAR)&RFValue);
-					if ((pAd->CommonCfg.BBPCurrentBW == BW_40)
-#ifdef RTMP_RBUS_SUPPORT
-#ifdef COC_SUPPORT
-						&& (pAd->CoC_sleep == 0)
-#endif // COC_SUPPORT //
-#endif // RTMP_RBUS_SUPPORT //
-					)
+					if ((pAd->CommonCfg.BBPCurrentBW == BW_40))
 						RFValue |= 0x03; // 40MBW tx_h20M=1,rx_h20M=1
 					else
 						RFValue &= ~(0x03); // 20MBW tx_h20M=0,rx_h20M=0
@@ -1879,13 +1659,12 @@ VOID RT3352_AsicTxAlcGetAutoAgcOffset(
 	IN PCHAR					pAgcCompensate,
 	IN PCHAR 					pDeltaPowerByBbpR1)
 {
-	const TX_POWER_TUNING_ENTRY_STRUCT *TxPowerTuningTable = pAd->chipCap.TxPowerTuningTable_2G;
+	TX_POWER_TUNING_ENTRY_STRUCT *TxPowerTuningTable = pAd->chipCap.TxPowerTuningTable_2G;
 	PTX_POWER_TUNING_ENTRY_STRUCT pTxPowerTuningEntry = NULL, pTxPowerTuningEntry2 = NULL;
 	static UCHAR	LastChannel = 0;
 	BBP_R49_STRUC 	BbpR49;
 	UCHAR 			RFValue = 0;
 	UCHAR 			RFValue2 = 0;
-	UCHAR 			TmpValue = 0;
 	UCHAR 			TssiChannel = 0;
 	CHAR 			desiredTSSI = 0;
 	CHAR 			currentTSSI = 0;

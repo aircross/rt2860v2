@@ -267,8 +267,8 @@ VOID WpaEAPOLKeyAction(
     {
 #ifdef MAC_REPEATER_SUPPORT
     	if (CliIdx != 0xFF)
-			pEntry = &pAd->MacTab.Content[pAd->ApCfg.ApCliTab[ifIndex].RepeaterCli[CliIdx].MacTabWCID];
-		else
+		pEntry = &pAd->MacTab.Content[pAd->ApCfg.ApCliTab[ifIndex].RepeaterCli[CliIdx].MacTabWCID];
+	else
 #endif /* MAC_REPEATER_SUPPORT */
         pEntry = MacTableLookup(pAd, pHeader->Addr2);
 
@@ -553,7 +553,6 @@ VOID RTMPToWirelessSta(
 #ifdef APCLI_SUPPORT
 		if (IS_ENTRY_APCLI(pEntry))
 		{
-			RTMP_SET_PACKET_SOURCE(pPacket, PKTSRC_NDIS);
 			RTMP_SET_PACKET_MOREDATA(pPacket, FALSE);
 			RTMP_SET_PACKET_NET_DEVICE_APCLI(pPacket, pEntry->MatchAPCLITabIdx);
 			RTMP_SET_PACKET_WCID(pPacket, pEntry->Aid); /* to ApClient links.*/
@@ -565,13 +564,11 @@ VOID RTMPToWirelessSta(
 #endif /* APCLI_SUPPORT */
 #endif /* CONFIG_AP_SUPPORT */
 		{
-			RTMP_SET_PACKET_SOURCE(pPacket, PKTSRC_NDIS);
-
 			RTMP_SET_PACKET_NET_DEVICE_MBSSID(pPacket, MAIN_MBSSID);	/* set a default value*/
 			if(pEntry->apidx != 0)
-        		RTMP_SET_PACKET_NET_DEVICE_MBSSID(pPacket, pEntry->apidx);
+				RTMP_SET_PACKET_NET_DEVICE_MBSSID(pPacket, pEntry->apidx);
 		
-        	RTMP_SET_PACKET_WCID(pPacket, (UCHAR)pEntry->Aid);
+			RTMP_SET_PACKET_WCID(pPacket, (UCHAR)pEntry->Aid);
 			RTMP_SET_PACKET_MOREDATA(pPacket, FALSE);
 #ifdef P2P_SUPPORT
 			if (IS_P2P_GO_ENTRY(pEntry))
@@ -706,20 +703,20 @@ BOOLEAN PeerWpaMessageSanity(
 	if (bReplayDiff)
 	{
 		/* send wireless event - for replay counter different*/
-			RTMPSendWirelessEvent(pAd, IW_REPLAY_COUNTER_DIFF_EVENT_FLAG, pEntry->Addr, pEntry->apidx, 0); 
+		RTMPSendWirelessEvent(pAd, IW_REPLAY_COUNTER_DIFF_EVENT_FLAG, pEntry->Addr, pEntry->apidx, 0); 
 
 		if (MsgType < EAPOL_GROUP_MSG_1)
 		{
-           	DBGPRINT(RT_DEBUG_ERROR, ("Replay Counter Different in pairwise msg %d of 4-way handshake!\n", MsgType));
+			DBGPRINT(RT_DEBUG_TRACE, ("Replay Counter Different in pairwise msg %d of 4-way handshake!\n", MsgType));
 		}
 		else
 		{
-			DBGPRINT(RT_DEBUG_ERROR, ("Replay Counter Different in group msg %d of 2-way handshake!\n", (MsgType - EAPOL_PAIR_MSG_4)));
+			DBGPRINT(RT_DEBUG_TRACE, ("Replay Counter Different in group msg %d of 2-way handshake!\n", (MsgType - EAPOL_PAIR_MSG_4)));
 		}
 		
 		hex_dump("Receive replay counter ", pMsg->KeyDesc.ReplayCounter, LEN_KEY_DESC_REPLAY);
 		hex_dump("Current replay counter ", pEntry->R_Counter, LEN_KEY_DESC_REPLAY);	
-        goto LabelErr;
+		goto LabelErr;
 	}
 
 	/* 2. Verify MIC except Pairwise Msg1*/
@@ -755,11 +752,11 @@ BOOLEAN PeerWpaMessageSanity(
 
 			if (MsgType < EAPOL_GROUP_MSG_1)
 			{
-                                DBGPRINT(RT_DEBUG_ERROR, ("MIC Different in pairwise msg %d of 4-way handshake!\n", MsgType));
+                                DBGPRINT(RT_DEBUG_TRACE, ("MIC Different in pairwise msg %d of 4-way handshake!\n", MsgType));
 			}
 			else
 			{
-				DBGPRINT(RT_DEBUG_ERROR, ("MIC Different in group msg %d of 2-way handshake!\n", (MsgType - EAPOL_PAIR_MSG_4)));
+				DBGPRINT(RT_DEBUG_TRACE, ("MIC Different in group msg %d of 2-way handshake!\n", (MsgType - EAPOL_PAIR_MSG_4)));
 			}
 	
 			hex_dump("Received MIC", rcvd_mic, LEN_KEY_DESC_MIC);
@@ -1411,7 +1408,7 @@ VOID PeerPairMsg3Action(
 #ifdef APCLI_SUPPORT
 		if (IS_ENTRY_APCLI(pEntry))
 		{
-			UINT				IfIndex = 0;
+			UINT IfIndex = 0;
 		
 			IfIndex = pEntry->MatchAPCLITabIdx;
 #ifdef MAC_REPEATER_SUPPORT
@@ -1440,7 +1437,7 @@ VOID PeerPairMsg3Action(
 #ifdef P2P_SUPPORT
 		if (IS_ENTRY_APCLI(pEntry))
 		{
-			UINT				IfIndex = 0;
+			UINT IfIndex = 0;
 		
 			IfIndex = pEntry->MatchAPCLITabIdx;
 			if (IfIndex >= MAX_APCLI_NUM)
@@ -1745,7 +1742,7 @@ VOID PeerPairMsg4Action(
 		}
 #endif /* P2P_SUPPORT */
 	 
-	        DBGPRINT(RT_DEBUG_OFF, ("AP SETKEYS DONE - WPA2, AuthMode(%d)=%s, WepStatus(%d)=%s, GroupWepStatus(%d)=%s\n\n", 
+	        DBGPRINT(RT_DEBUG_TRACE, ("AP SETKEYS DONE - WPA2, AuthMode(%d)=%s, WepStatus(%d)=%s, GroupWepStatus(%d)=%s\n\n", 
 									pEntry->AuthMode, GetAuthMode(pEntry->AuthMode), 
 									pEntry->WepStatus, GetEncryptType(pEntry->WepStatus), 
 									group_cipher, 
@@ -1754,10 +1751,7 @@ VOID PeerPairMsg4Action(
 		else
 		{
         	/* 5. init Group 2-way handshake if necessary.*/
-	        WPAStart2WayGroupHS(pAd, pEntry);
-
-        	pEntry->ReTryCounter = GROUP_MSG1_RETRY_TIMER_CTR;
-			RTMPModTimer(&pEntry->RetryTimer, PEER_MSG3_RETRY_EXEC_INTV);
+			RTMPSetTimer(&pEntry->Start2WayGroupHSTimer, 200);
 		}
     }while(FALSE);
     
@@ -2110,6 +2104,25 @@ VOID EnqueueStartForPSKExec(
 		
 }
 
+VOID Start2WayGroupHSExec(
+    IN PVOID SystemSpecific1, 
+    IN PVOID FunctionContext, 
+    IN PVOID SystemSpecific2, 
+    IN PVOID SystemSpecific3) 
+{
+    MAC_TABLE_ENTRY *pEntry = (MAC_TABLE_ENTRY *)FunctionContext;
+
+    if ((pEntry) && IS_ENTRY_CLIENT(pEntry))
+    {
+    	PRTMP_ADAPTER pAd = (PRTMP_ADAPTER)pEntry->pAd;
+
+		/* init Group 2-way handshake if necessary.*/
+		WPAStart2WayGroupHS(pAd, pEntry);
+
+		pEntry->ReTryCounter = GROUP_MSG1_RETRY_TIMER_CTR;
+		RTMPModTimer(&pEntry->RetryTimer, PEER_MSG3_RETRY_EXEC_INTV);
+    }
+}
 
 VOID MlmeDeAuthAction(
     IN PRTMP_ADAPTER    pAd, 
@@ -2156,15 +2169,14 @@ VOID MlmeDeAuthAction(
                           END_OF_ARGS);
 
 
-
-		if (bDataFrameFirst)
+	if (bDataFrameFirst)
             MiniportMMRequest(pAd, MGMT_USE_QUEUE_FLAG, pOutBuffer, FrameLen);
         else
             MiniportMMRequest(pAd, 0, pOutBuffer, FrameLen);
         MlmeFreeMemory(pAd, pOutBuffer);
     
         /* ApLogEvent(pAd, pEntry->Addr, EVENT_DISASSOCIATED);*/
-        MacTableDeleteEntry(pAd, pEntry->Aid, pEntry->Addr);
+		MacTableDeleteEntry(pAd, pEntry->Aid, pEntry->Addr);
     }
 }
 
@@ -2239,7 +2251,7 @@ VOID PeerGroupMsg2Action(
 			/* send wireless event - for set key done WPA2*/
 				RTMPSendWirelessEvent(pAd, IW_SET_KEY_DONE_WPA2_EVENT_FLAG, pEntry->Addr, pEntry->apidx, 0); 
 
-			DBGPRINT(RT_DEBUG_OFF, ("AP SETKEYS DONE - WPA2, AuthMode(%d)=%s, WepStatus(%d)=%s, GroupWepStatus(%d)=%s\n\n", 
+			DBGPRINT(RT_DEBUG_TRACE, ("AP SETKEYS DONE - WPA2, AuthMode(%d)=%s, WepStatus(%d)=%s, GroupWepStatus(%d)=%s\n\n", 
 										pEntry->AuthMode, GetAuthMode(pEntry->AuthMode), 
 										pEntry->WepStatus, GetEncryptType(pEntry->WepStatus), 
 										group_cipher, GetEncryptType(group_cipher)));
@@ -2249,7 +2261,7 @@ VOID PeerGroupMsg2Action(
 			/* send wireless event - for set key done WPA*/
 				RTMPSendWirelessEvent(pAd, IW_SET_KEY_DONE_WPA1_EVENT_FLAG, pEntry->Addr, pEntry->apidx, 0); 
 
-        	DBGPRINT(RT_DEBUG_OFF, ("AP SETKEYS DONE - WPA1, AuthMode(%d)=%s, WepStatus(%d)=%s, GroupWepStatus(%d)=%s\n\n", 
+        	DBGPRINT(RT_DEBUG_TRACE, ("AP SETKEYS DONE - WPA1, AuthMode(%d)=%s, WepStatus(%d)=%s, GroupWepStatus(%d)=%s\n\n", 
 										pEntry->AuthMode, GetAuthMode(pEntry->AuthMode), 
 										pEntry->WepStatus, GetEncryptType(pEntry->WepStatus), 
 										group_cipher, GetEncryptType(group_cipher)));
@@ -5202,5 +5214,25 @@ VOID RTMPSetWcidSecurityInfo(
 							Wcid,
 							KeyTabFlag);
 
+}
+
+/** from wpa_supplicant
+ * inc_byte_array - Increment arbitrary length byte array by one
+ * @counter: Pointer to byte array
+ * @len: Length of the counter in bytes
+ *
+ * This function increments the last byte of the counter by one and continues
+ * rolling over to more significant bytes if the byte was incremented from
+ * 0xff to 0x00.
+ */
+void inc_byte_array(UCHAR *counter, int len)
+{
+	int pos = len - 1;
+	while (pos >= 0) {
+		counter[pos]++;
+		if (counter[pos] != 0)
+			break;
+		pos--;
+	}
 }
 

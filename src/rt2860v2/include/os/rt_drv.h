@@ -68,20 +68,20 @@ typedef VOID	pregs;
  ***********************************************************************************/
 #ifdef CONFIG_AP_SUPPORT
 #ifdef RTMP_MAC_PCI
-#define AP_PROFILE_PATH			"/etc/Wireless/RT2860AP/RT2860AP.dat"
-#define AP_RTMP_FIRMWARE_FILE_NAME "/etc/Wireless/RT2860AP/RT2860AP.bin"
-#define AP_NIC_DEVICE_NAME			"RT2860AP"
-#define AP_DRIVER_VERSION			"2.7.0.0"
+#define AP_PROFILE_PATH			"/etc/Wireless/RT2860/RT2860AP.dat"
+#define AP_RTMP_FIRMWARE_FILE_NAME	"/etc_ro/Wireless/RT2860AP.bin"
+#define AP_NIC_DEVICE_NAME		"RT2860AP"
+#define AP_DRIVER_VERSION		"2.7.2.0"
 #ifdef MULTIPLE_CARD_SUPPORT
-#define CARD_INFO_PATH			"/etc/Wireless/RT2860AP/RT2860APCard.dat"
+#define CARD_INFO_PATH			"/etc/Wireless/RT2860/RT2860APCard.dat"
 #endif /* MULTIPLE_CARD_SUPPORT */
 #endif /* RTMP_MAC_PCI */
 
 #ifdef RTMP_RBUS_SUPPORT
 /* This used for rbus-based chip, maybe we can integrate it together. */
-#define RTMP_FIRMWARE_FILE_NAME		"/etc_ro/Wireless/RT2860AP/RT2860AP.bin"
+#define RTMP_FIRMWARE_FILE_NAME		"/etc_ro/Wireless/RT2860AP.bin"
 #define PROFILE_PATH			"/etc/Wireless/RT2860i.dat"
-#define AP_PROFILE_PATH_RBUS		"/etc/Wireless/RT2860/RT2860.dat"
+#define AP_PROFILE_PATH_RBUS		"/etc/Wireless/RT2860/RT2860AP.dat"
 #define RT2880_AP_DRIVER_VERSION	"1.0.0.0"
 #endif /* RTMP_RBUS_SUPPORT */
 #endif /* CONFIG_AP_SUPPORT */
@@ -89,25 +89,25 @@ typedef VOID	pregs;
 
 #ifdef CONFIG_STA_SUPPORT
 #ifdef RTMP_MAC_PCI
-#define STA_PROFILE_PATH			"/etc/Wireless/RT2860STA/RT2860STA.dat"
-#define STA_DRIVER_VERSION			"2.6.0.0"
+#define STA_PROFILE_PATH		"/etc/Wireless/RT2860/RT2860STA.dat"
+#define STA_DRIVER_VERSION		"2.6.2.0"
 #ifdef MULTIPLE_CARD_SUPPORT
-#define CARD_INFO_PATH			"/etc/Wireless/RT2860STA/RT2860STACard.dat"
+#define CARD_INFO_PATH			"/etc/Wireless/RT2860/RT2860STACard.dat"
 #endif /* MULTIPLE_CARD_SUPPORT */
 #endif /* RTMP_MAC_PCI */
 
 
 #ifdef RTMP_RBUS_SUPPORT
-#define RTMP_FIRMWARE_FILE_NAME		"/etc_ro/Wireless/RT2860STA/RT2860STA.bin"
+#define RTMP_FIRMWARE_FILE_NAME		"/etc_ro/Wireless/RT2860STA.bin"
 #define PROFILE_PATH			"/etc/Wireless/RT2860i.dat"
-#define STA_PROFILE_PATH_RBUS	"/etc/Wireless/RT2860/RT2860.dat"
-#define RT2880_STA_DRIVER_VERSION		"1.0.0.0"
+#define STA_PROFILE_PATH_RBUS		"/etc/Wireless/RT2860/RT2860STA.dat"
+#define RT2880_STA_DRIVER_VERSION	"1.0.0.0"
 #endif /* RTMP_RBUS_SUPPORT */
 #endif /* CONFIG_STA_SUPPORT */
 
 #ifdef SINGLE_SKU_V2
 #ifdef RTMP_RBUS_SUPPORT
-#define SINGLE_SKU_TABLE_FILE_NAME	"/etc_ro/Wireless/RT2860AP/SingleSKU.dat"
+#define SINGLE_SKU_TABLE_FILE_NAME	"/etc/Wireless/RT2860/SingleSKU.dat"
 #endif /* RTMP_RBUS_SUPPORT */
 #endif /* SINGLE_SKU_V2 */
 
@@ -710,8 +710,6 @@ void linux_pci_unmap_single(void *handle, ra_dma_addr_t dma_addr, size_t size, i
 /***********************************************************************************
  *	Network Related data structure and marco definitions
  ***********************************************************************************/
-#define PKTSRC_NDIS             0x7f
-#define PKTSRC_DRIVER           0x0f
 
 #define RTMP_OS_NETDEV_GET_PHYADDR	RtmpOsNetDevGetPhyAddr
 #define SET_OS_PKT_NETDEV			RtmpOsSetPktNetDev
@@ -836,10 +834,6 @@ extern ULONG RtmpOsGetUnalignedlong(
 /* 0x80~0xff: TX to a WDS link. b0~6: WDS index */
 #define RTMP_SET_PACKET_WCID(_p, _wdsidx)		(PACKET_CB(_p, 2) = _wdsidx)
 #define RTMP_GET_PACKET_WCID(_p)          		(PACKET_CB(_p, 2))
-
-/* 0xff: PKTSRC_NDIS, others: local TX buffer index. This value affects how to a packet */
-#define RTMP_SET_PACKET_SOURCE(_p, _pktsrc)		(PACKET_CB(_p, 3) = _pktsrc)
-#define RTMP_GET_PACKET_SOURCE(_p)       		(PACKET_CB(_p, 3))
 
 /* RTS/CTS-to-self protection method */
 #define RTMP_SET_PACKET_RTS(_p, _num)      		(PACKET_CB(_p, 4) = _num)
@@ -1038,12 +1032,6 @@ void FlashRead(UCHAR * p, ULONG a, ULONG b);
 int wl_proc_init(void);
 int wl_proc_exit(void);
 
-#ifdef LINUX
-#if defined(CONFIG_RA_CLASSIFIER)||defined(CONFIG_RA_CLASSIFIER_MODULE)
-extern volatile unsigned long classifier_cur_cycle;
-extern int (*ra_classifier_hook_rx) (struct sk_buff *skb, unsigned long cycle);
-#endif /* defined(CONFIG_RA_CLASSIFIER)||defined(CONFIG_RA_CLASSIFIER_MODULE) */
-#endif /* LINUX */
 #endif /* RTMP_RBUS_SUPPORT */
 
 

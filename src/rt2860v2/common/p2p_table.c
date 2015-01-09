@@ -436,7 +436,9 @@ VOID P2pCopyP2PTabtoMacTab(
  */
 VOID P2pGroupTabInit(
 	IN PRTMP_ADAPTER pAd) 
-{
+{
+
+
 	PRT_P2P_TABLE	Tab = &pAd->P2pTable;
 	UCHAR		i;
 	
@@ -577,7 +579,8 @@ UCHAR P2pGroupTabInsert(
 	IN UCHAR SsidLen,
 	IN UCHAR DevCap,
 	IN UCHAR GrpCap)
-{	PRT_P2P_TABLE	Tab = &pAd->P2pTable;
+{
+	PRT_P2P_TABLE	Tab = &pAd->P2pTable;
 	UCHAR		i;
 	
 	RTMP_SEM_LOCK(&pAd->P2pTableSemLock);
@@ -666,7 +669,8 @@ UCHAR P2pGroupTabDelete(
 	IN PRTMP_ADAPTER pAd, 
 	IN UCHAR    p2pindex, 
 	IN PUCHAR    Addr) 
-{	UCHAR	index = 0xff;
+{
+	UCHAR	index = 0xff;
 	PRT_P2P_CLIENT_ENTRY		pP2pEntry;
 
 	RTMP_SEM_LOCK(&pAd->P2pTableSemLock);
@@ -734,7 +738,8 @@ UCHAR P2pGroupTabDelete(
 UCHAR P2pGroupTabSearch(
 	IN PRTMP_ADAPTER pAd, 
 	IN PUCHAR    Addr) 
-{	UCHAR	i;
+{
+	UCHAR	i;
 	PRT_P2P_TABLE	Tab = &pAd->P2pTable;
 	UCHAR	index = P2P_NOT_FOUND;
 	UCHAR           Allff[MAC_ADDR_LEN] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
@@ -779,7 +784,8 @@ UCHAR P2pGroupTabSearch(
  */
 VOID P2pPerstTabClean(
 	IN PRTMP_ADAPTER pAd) 
-{	PRT_P2P_PERSISTENT_ENTRY		pP2pPerstEntry;
+{
+	PRT_P2P_PERSISTENT_ENTRY		pP2pPerstEntry;
 	UCHAR		i;
 	
 	DBGPRINT(RT_DEBUG_TRACE,("P2pPerstTabClean .  \n"));
@@ -809,7 +815,8 @@ UCHAR P2pPerstTabInsert(
 	IN PRTMP_ADAPTER pAd,
 	IN PUCHAR	pAddr,
 	IN PWSC_CREDENTIAL pProfile) 
-{	PRT_P2P_TABLE	Tab = &pAd->P2pTable;
+{
+	PRT_P2P_TABLE	Tab = &pAd->P2pTable;
 	UCHAR		i, j;
 	UCHAR		index = 0;
 	WSC_CREDENTIAL	*pPerstProfile;
@@ -913,7 +920,8 @@ UCHAR P2pPerstTabInsert(
 UCHAR P2pPerstTabDelete(
 	IN PRTMP_ADAPTER pAd,
 	IN UCHAR	*pMacList) 
-{	PRT_P2P_TABLE	Tab = &pAd->P2pTable;
+{
+	PRT_P2P_TABLE	Tab = &pAd->P2pTable;
 	UCHAR		i;
 	
 	for (i = 0; i < MAX_P2P_TABLE_SIZE; i++)

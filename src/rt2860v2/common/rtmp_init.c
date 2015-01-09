@@ -99,11 +99,10 @@ RTMP_REG_PAIR	MACRegTable[] =	{
 	{MAC_SYS_CTRL,		0x00}, /* 0x1004, , default Disable RX*/
 	{RX_FILTR_CFG,		0x17f97}, /*0x1400  , RX filter control,  */
 	{BKOFF_SLOT_CFG,	0x209}, /* default set short slot time, CC_DELAY_TIME should be 2	 */
-	/*{TX_SW_CFG0,		0x40a06},  Gary,2006-08-23 */
-#ifndef RT6352
+#if !defined(RT6352) && !defined(RT2883) && !defined(RT3883) && !defined(RT305x)
 	{TX_SW_CFG0,		0x0}, 		/* Gary,2008-05-21 for CWC test */
 	{TX_SW_CFG1,		0x80606}, /* Gary,2006-08-23 */
-#endif /* RT6352 */
+#endif
 	{TX_LINK_CFG,		0x1020},		/* Gary,2006-08-23 */
 	/*{TX_TIMEOUT_CFG,	0x00182090},	 CCK has some problem. So increase timieout value. 2006-10-09 MArvek RT*/
 	{TX_TIMEOUT_CFG,	0x000a2090},	/* CCK has some problem. So increase timieout value. 2006-10-09 MArvek RT , Modify for 2860E ,2007-08-01*/
@@ -235,7 +234,6 @@ NDIS_STATUS	RTMPAllocAdapterBlock(
 	do
 	{
 		/* Allocate RTMP_ADAPTER memory block*/
-/*		pBeaconBuf = kmalloc(MAX_BEACON_SIZE, MEM_ALLOC_FLAG);*/
 		os_alloc_mem(NULL, (UCHAR **)&pBeaconBuf, MAX_BEACON_SIZE);
 		if (pBeaconBuf == NULL)
 		{
@@ -276,7 +274,7 @@ NDIS_STATUS	RTMPAllocAdapterBlock(
 		pAd->BeaconBuf = pBeaconBuf;
 		DBGPRINT(RT_DEBUG_OFF, ("\n\n=== pAd = %p, size = %d ===\n\n", pAd, (UINT32)sizeof(RTMP_ADAPTER)));
 
-		if (RtmpOsStatsAlloc(&pAd->stats, &pAd->iw_stats) == FALSE)
+		if (RtmpOsStatsAlloc(&pAd->iw_stats) == FALSE)
 		{
 			Status = NDIS_STATUS_FAILURE;
 			break;
@@ -343,14 +341,12 @@ NDIS_STATUS	RTMPAllocAdapterBlock(
 	if ((Status != NDIS_STATUS_SUCCESS) && (pBeaconBuf))
 	{
 		os_free_mem(NULL, pBeaconBuf);
-		pAd->BeaconBuf = NULL;
+		if (pAd)
+			pAd->BeaconBuf = NULL;
 	}
 
 	if ((Status != NDIS_STATUS_SUCCESS) && (pAd != NULL))
 	{
-		if (pAd->stats != NULL)
-			os_free_mem(NULL, pAd->stats);
-
 		if (pAd->iw_stats != NULL)
 			os_free_mem(NULL, pAd->iw_stats);
 	}
@@ -636,15 +632,19 @@ VOID	NICReadEEPROMParameters(
 	IN	PSTRING			mac_addr)
 {
 	UINT32			data = 0;
-	USHORT			i, value, value2;
+	USHORT			i, value;
+#if !defined(EEPROM_COUNTRY_UNLOCK)
+	USHORT			value2;
+#endif
 	EEPROM_TX_PWR_STRUC	    Power;
 	EEPROM_VERSION_STRUC    Version;
 	EEPROM_ANTENNA_STRUC	Antenna;
 	EEPROM_NIC_CONFIG2_STRUC    NicConfig2;
-	USHORT  Addr01,Addr23,Addr45 ;
+#ifdef READ_MAC_FROM_EEPROM
+	USHORT  Addr01,Addr23,Addr45;
+#endif
 	MAC_DW0_STRUC csr2;
 	MAC_DW1_STRUC csr3;
-
 
 	DBGPRINT(RT_DEBUG_TRACE, ("--> NICReadEEPROMParameters\n"));	
 
@@ -672,6 +672,7 @@ VOID	NICReadEEPROMParameters(
 		pAd->EEPROMAddressNum = 8;     /* 93C86*/
 	DBGPRINT(RT_DEBUG_TRACE, ("--> EEPROMAddressNum = %d\n", pAd->EEPROMAddressNum ));
 
+#ifdef READ_MAC_FROM_EEPROM
 	/* Read MAC setting from EEPROM and record as permanent MAC address */
 	DBGPRINT(RT_DEBUG_TRACE, ("Initialize MAC Address from E2PROM \n"));
 
@@ -698,7 +699,9 @@ VOID	NICReadEEPROMParameters(
 	{		
 		DBGPRINT(RT_DEBUG_TRACE, ("Use the MAC address what is assigned from Configuration file(.dat). \n"));
 	}
-	else if (mac_addr && 
+	else
+#endif
+	if (mac_addr && 
 			 strlen((PSTRING)mac_addr) == 17 &&
 			 (strcmp(mac_addr, "00:00:00:00:00:00") != 0))
 	{
@@ -715,13 +718,34 @@ VOID	NICReadEEPROMParameters(
 		
 		DBGPRINT(RT_DEBUG_TRACE, ("Use the MAC address what is assigned from Moudle Parameter. \n"));
 	}
+#ifdef READ_MAC_FROM_EEPROM
 	else
 	{
 		COPY_MAC_ADDR(pAd->CurrentAddress, pAd->PermanentAddress);
 		DBGPRINT(RT_DEBUG_TRACE, ("Use the MAC address what is assigned from EEPROM. \n"));
 	}
+#endif
 
-	/* Set the current MAC to ASIC */	
+/* FIX: For correct work APCLI/MBSSID need correct MAC */
+#if !defined(NEW_MBSSID_MODE)
+#if defined(MBSS_SUPPORT)
+	/* Test MAC[5] for 4 MAC support */
+	if ((pAd->CurrentAddress[5] % 4) != 0)
+	{
+		pAd->CurrentAddress[5] &= 0xfc; // Max 4 MBSSID
+		pAd->CurrentAddress[0] |= 0x02; // diff from iNIC
+	}
+#elif defined(APCLI_SUPPORT)
+	/* Test MAC[5] for 2 MAC support */
+	if ((pAd->CurrentAddress[5] % 2) != 0)
+	{
+		pAd->CurrentAddress[5] &= 0xfe; // Max 2 MBSSID
+		pAd->CurrentAddress[0] |= 0x02; // diff from iNIC
+	}
+#endif
+#endif
+
+	/* Set the current MAC to ASIC */
 	csr2.field.Byte0 = pAd->CurrentAddress[0];
 	csr2.field.Byte1 = pAd->CurrentAddress[1];
 	csr2.field.Byte2 = pAd->CurrentAddress[2];
@@ -807,14 +831,12 @@ VOID	NICReadEEPROMParameters(
 	/* Read Tx AGC control bit*/
 	Antenna.word = pAd->EEPROMDefaultValue[EEPROM_NIC_CFG1_OFFSET];
 
-
-
 	/* must be put here, because RTMP_CHIP_ANTENNA_INFO_DEFAULT_RESET() will clear *
 	 * EPROM 0x34~3 */
 #ifdef TXRX_SW_ANTDIV_SUPPORT
 	/* EEPROM 0x34[15:12] = 0xF is invalid, 0x2~0x3 is TX/RX SW AntDiv */
 	if (((Antenna.word & 0xFF00) != 0xFF00) && (Antenna.word & 0x2000))  
-	{																	  
+	{
 		pAd->chipCap.bTxRxSwAntDiv = TRUE;		/* for GPIO switch */
 		DBGPRINT(RT_DEBUG_OFF, ("\x1b[mAntenna word %X/%d, AntDiv %d\x1b[m\n", 
 					Antenna.word, Antenna.field.BoardType, pAd->NicConfig2.field.AntDiversity));
@@ -1045,6 +1067,7 @@ VOID	NICReadEEPROMParameters(
 
 	DBGPRINT(RT_DEBUG_TRACE, ("E2PROM: RF FreqOffset=0x%lx \n", pAd->RfFreqOffset));
 
+#if !defined(EEPROM_COUNTRY_UNLOCK)
 	/*CountryRegion byte offset (38h)*/
 #ifdef RT3883
 	if (IS_RT3883(pAd))
@@ -1058,7 +1081,7 @@ VOID	NICReadEEPROMParameters(
 		value = pAd->EEPROMDefaultValue[EEPROM_COUNTRY_REG_OFFSET] >> 8;		/* 2.4G band*/
 		value2 = pAd->EEPROMDefaultValue[EEPROM_COUNTRY_REG_OFFSET] & 0x00FF;	/* 5G band*/
 	}
-	
+
 	if ((value <= REGION_MAXIMUM_BG_BAND) || (value == REGION_32_BG_BAND) || (value == REGION_33_BG_BAND))
 	{
 		pAd->CommonCfg.CountryRegion = ((UCHAR) value) | 0x80;
@@ -1068,7 +1091,7 @@ VOID	NICReadEEPROMParameters(
 	{
 		pAd->CommonCfg.CountryRegionForABand = ((UCHAR) value2) | 0x80;
 	}
-
+#endif
 
 	
 	/* Get RSSI Offset on EEPROM 0x9Ah & 0x9Ch.*/
@@ -1534,7 +1557,7 @@ NDIS_STATUS NICInitBBP(
 	INT Index = 0;
 	UCHAR R0 = 0xff;
 #ifdef MICROWAVE_OVEN_SUPPORT
-	UINT8 BBPValue;
+	UINT8 BBPValue = 0;
 #endif /* MICROWAVE_OVEN_SUPPORT */
 	
 	/* Read BBP register, make sure BBP is up and running before write new data*/
@@ -1597,7 +1620,7 @@ NDIS_STATUS NICInitBBP(
 	/* Backup BBP_R65  */
 	RTMP_BBP_IO_READ8_BY_REG_ID(pAd, BBP_R65, &BBPValue);
 	pAd->CommonCfg.MO_Cfg.Stored_BBP_R65 = BBPValue;
-	DBGPRINT(RT_DEBUG_TRACE("Stored_BBP_R65=%x @%s \n", pAd->CommonCfg.MO_Cfg.Stored_BBP_R65, __FUNCTION__));
+	DBGPRINT(RT_DEBUG_TRACE, ("Stored_BBP_R65=%x @%s \n", pAd->CommonCfg.MO_Cfg.Stored_BBP_R65, __FUNCTION__));
 #endif /* MICROWAVE_OVEN_SUPPORT */
 
 	return NDIS_STATUS_SUCCESS;
@@ -1844,8 +1867,9 @@ NDIS_STATUS	NICInitializeAsic(
 	UINT32			Value;
 #endif /* RTMP_PCI_SUPPORT */
 	USHORT			KeyIdx;
+#ifdef RT6352
 	UCHAR			BbpReg = 0;
-
+#endif
 
 	DBGPRINT(RT_DEBUG_TRACE, ("--> NICInitializeAsic\n"));
 
@@ -2289,17 +2313,17 @@ VOID NICUpdateFifoStaCounters(
 #endif /* RALINK_ATE */
 
 #ifdef MAC_REPEATER_SUPPORT
-		MaxWcidNum = MAX_MAC_TABLE_SIZE_WITH_REPEATER;
+	MaxWcidNum = MAX_MAC_TABLE_SIZE_WITH_REPEATER;
 #endif /* MAC_REPEATER_SUPPORT */
 
-		do
-		{
-			RTMP_IO_READ32(pAd, TX_STA_FIFO, &StaFifo.word);
+	do
+	{
+		RTMP_IO_READ32(pAd, TX_STA_FIFO, &StaFifo.word);
 
-			if (StaFifo.field.bValid == 0)
-				break;
+		if (StaFifo.field.bValid == 0)
+			break;
 		
-			wcid = (UCHAR)StaFifo.field.wcid;
+		wcid = (UCHAR)StaFifo.field.wcid;
 
 #ifdef DBG_CTRL_SUPPORT
 #ifdef INCLUDE_DEBUG_QUEUE
@@ -2310,143 +2334,143 @@ VOID NICUpdateFifoStaCounters(
 #endif /* DBG_CTRL_SUPPORT */
 
 		/* ignore NoACK and MGMT frame use 0xFF as WCID */
-			if ((StaFifo.field.TxAckRequired == 0) || (wcid >= MaxWcidNum))
-			{
-				i++;
-				continue;
-			}
+		if ((StaFifo.field.TxAckRequired == 0) || (wcid >= MaxWcidNum))
+		{
+			i++;
+			continue;
+		}
 
-			/* PID store Tx MCS Rate */
-			pid = (UCHAR)StaFifo.field.PidType;
+		/* PID store Tx MCS Rate */
+		pid = (UCHAR)StaFifo.field.PidType;
 
-			pEntry = &pAd->MacTab.Content[wcid];
+		pEntry = &pAd->MacTab.Content[wcid];
 
-			pEntry->DebugFIFOCount++;
+		pEntry->DebugFIFOCount++;
 
 
 #ifdef DOT11_N_SUPPORT
 #ifdef TXBF_SUPPORT
-			/* Update BF statistics*/
-			if (pAd->chipCap.FlgHwTxBfCap)
-			{
-				int succMCS = (StaFifo.field.SuccessRate & 0x7F);
-				int origMCS = pid;
+		/* Update BF statistics*/
+		if (pAd->chipCap.FlgHwTxBfCap)
+		{
+			int succMCS = (StaFifo.field.SuccessRate & 0x7F);
+			int origMCS = pid;
 
-				if (succMCS==32)
-					origMCS = 32;
+			if (succMCS==32)
+				origMCS = 32;
 #ifdef DOT11N_SS3_SUPPORT
-				if (succMCS>origMCS && pEntry->HTCapability.MCSSet[2]==0xff)
-					origMCS += 16;
+			if (succMCS>origMCS && pEntry->HTCapability.MCSSet[2]==0xff)
+				origMCS += 16;
 #endif /* DOT11N_SS3_SUPPORT */
 
-				if (succMCS>origMCS)
-					origMCS = succMCS+1;
+			if (succMCS>origMCS)
+				origMCS = succMCS+1;
 
-				/* MCS16 falls back to MCS8*/
-				if (origMCS>=16 && succMCS<=8)
-					succMCS += 8;
+			/* MCS16 falls back to MCS8*/
+			if (origMCS>=16 && succMCS<=8)
+				succMCS += 8;
 
-				/* MCS8 falls back to 0 */
-				if (origMCS >= 8 && succMCS == 0)
-					succMCS += 7;
+			/* MCS8 falls back to 0 */
+			if (origMCS >= 8 && succMCS == 0)
+				succMCS += 7;
 
-				reTry = origMCS-succMCS;
+			reTry = origMCS-succMCS;
 
-				if (StaFifo.field.eTxBF) {
-					if (StaFifo.field.TxSuccess)
-						pEntry->TxBFCounters.ETxSuccessCount++;
-					else
-						pEntry->TxBFCounters.ETxFailCount++;
-					pEntry->TxBFCounters.ETxRetryCount += reTry;
-				}
-				else if (StaFifo.field.iTxBF) {
-					if (StaFifo.field.TxSuccess)
-						pEntry->TxBFCounters.ITxSuccessCount++;
-					else
-						pEntry->TxBFCounters.ITxFailCount++;
-					pEntry->TxBFCounters.ITxRetryCount += reTry;
-				}
-				else {
-					if (StaFifo.field.TxSuccess)
-						pEntry->TxBFCounters.TxSuccessCount++;
-					else
-						pEntry->TxBFCounters.TxFailCount++;
-					pEntry->TxBFCounters.TxRetryCount += reTry;
-				}
+			if (StaFifo.field.eTxBF) {
+				if (StaFifo.field.TxSuccess)
+					pEntry->TxBFCounters.ETxSuccessCount++;
+				else
+					pEntry->TxBFCounters.ETxFailCount++;
+				pEntry->TxBFCounters.ETxRetryCount += reTry;
 			}
+			else if (StaFifo.field.iTxBF) {
+				if (StaFifo.field.TxSuccess)
+					pEntry->TxBFCounters.ITxSuccessCount++;
+				else
+					pEntry->TxBFCounters.ITxFailCount++;
+				pEntry->TxBFCounters.ITxRetryCount += reTry;
+			}
+			else {
+				if (StaFifo.field.TxSuccess)
+					pEntry->TxBFCounters.TxSuccessCount++;
+				else
+					pEntry->TxBFCounters.TxFailCount++;
+				pEntry->TxBFCounters.TxRetryCount += reTry;
+			}
+		}
 #endif /* TXBF_SUPPORT */
 #endif /* DOT11_N_SUPPORT */
 
 #ifdef UAPSD_SUPPORT
-			UAPSD_SP_AUE_Handle(pAd, pEntry, StaFifo.field.TxSuccess);
+		UAPSD_SP_AUE_Handle(pAd, pEntry, StaFifo.field.TxSuccess);
 #endif /* UAPSD_SUPPORT */
 
 #ifdef CONFIG_STA_SUPPORT
-			if (RTMP_TEST_FLAG(pAd, fRTMP_ADAPTER_BSS_SCAN_IN_PROGRESS))
-				continue;
+		if (RTMP_TEST_FLAG(pAd, fRTMP_ADAPTER_BSS_SCAN_IN_PROGRESS))
+			continue;
 #endif /* CONFIG_STA_SUPPORT */
 
-			if (!StaFifo.field.TxSuccess)
-			{
-				pEntry->FIFOCount++;
-				pEntry->OneSecTxFailCount++;
+		if (!StaFifo.field.TxSuccess)
+		{
+			pEntry->FIFOCount++;
+			pEntry->OneSecTxFailCount++;
 									
-				if (pEntry->FIFOCount >= 1)
-				{			
-					DBGPRINT(RT_DEBUG_TRACE, ("#"));
+			if (pEntry->FIFOCount >= 1)
+			{			
+				DBGPRINT(RT_DEBUG_TRACE, ("#"));
 #ifdef DOT11_N_SUPPORT
-					pEntry->NoBADataCountDown = 64;
+				pEntry->NoBADataCountDown = 64;
 #endif /* DOT11_N_SUPPORT */
 
 #ifdef CONFIG_STA_SUPPORT
 #ifdef DOT11Z_TDLS_SUPPORT
-					IF_DEV_CONFIG_OPMODE_ON_STA(pAd)
+				IF_DEV_CONFIG_OPMODE_ON_STA(pAd)
+				{
+					if(IS_ENTRY_TDLS(pEntry))
 					{
-						if(IS_ENTRY_TDLS(pEntry))
+						pEntry->TdlsTxFailCount++;
+						if (pEntry->TdlsTxFailCount >= 15)
 						{
-							pEntry->TdlsTxFailCount++;
-							if (pEntry->TdlsTxFailCount >= 15)
-							{
-								DBGPRINT(RT_DEBUG_OFF, ("TDLS: TxFail >= 15 LinkTearDown !!!\n"));
-								TDLS_TearDownPeerLink(pAd, pEntry->Addr, FALSE);
-							}
+							DBGPRINT(RT_DEBUG_OFF, ("TDLS: TxFail >= 15 LinkTearDown !!!\n"));
+							TDLS_TearDownPeerLink(pAd, pEntry->Addr, FALSE);
 						}
 					}
+				}
 #endif /* DOT11Z_TDLS_SUPPORT */
 #endif /* CONFIG_STA_SUPPORT */
 
-					/* Update the continuous transmission counter.*/
-					pEntry->ContinueTxFailCnt++;
+				/* Update the continuous transmission counter.*/
+				pEntry->ContinueTxFailCnt++;
 
-					if(pEntry->PsMode == PWR_ACTIVE)
-					{
+				if(pEntry->PsMode == PWR_ACTIVE)
+				{
 #ifdef DOT11_N_SUPPORT					
-						int tid;
-						for (tid=0; tid<NUM_OF_TID; tid++)
-						{
-							BAOriSessionTearDown(pAd, pEntry->Aid,  tid, FALSE, FALSE);
-						}
+					int tid;
+					for (tid=0; tid<NUM_OF_TID; tid++)
+					{
+						BAOriSessionTearDown(pAd, pEntry->Aid,  tid, FALSE, FALSE);
+					}
 #endif /* DOT11_N_SUPPORT */
 
 
 #ifdef WDS_SUPPORT
-						/* fix WDS Jam issue*/
-						if(IS_ENTRY_WDS(pEntry)
-							&& (pEntry->LockEntryTx == FALSE)
-							&& (pEntry->ContinueTxFailCnt >= pAd->ApCfg.EntryLifeCheck))
-						{ 
-							DBGPRINT(RT_DEBUG_TRACE, ("Entry %02x:%02x:%02x:%02x:%02x:%02x Blocked!! (Fail Cnt = %d)\n",
-								pEntry->Addr[0],pEntry->Addr[1],pEntry->Addr[2],pEntry->Addr[3],
-								pEntry->Addr[4],pEntry->Addr[5],pEntry->ContinueTxFailCnt ));
+					/* fix WDS Jam issue*/
+					if(IS_ENTRY_WDS(pEntry)
+						&& (pEntry->LockEntryTx == FALSE)
+						&& (pEntry->ContinueTxFailCnt >= pAd->ApCfg.EntryLifeCheck))
+					{ 
+						DBGPRINT(RT_DEBUG_TRACE, ("Entry %02x:%02x:%02x:%02x:%02x:%02x Blocked!! (Fail Cnt = %d)\n",
+							pEntry->Addr[0],pEntry->Addr[1],pEntry->Addr[2],pEntry->Addr[3],
+							pEntry->Addr[4],pEntry->Addr[5],pEntry->ContinueTxFailCnt ));
 
-							pEntry->LockEntryTx = TRUE;
-						}
-#endif /* WDS_SUPPORT */
+						pEntry->LockEntryTx = TRUE;
 					}
+#endif /* WDS_SUPPORT */
+				}
 
 					/*pEntry->FIFOCount = 0;*/
-				}
-				/*pEntry->bSendBAR = TRUE;*/
+			}
+			/*pEntry->bSendBAR = TRUE;*/
 #ifdef CONFIG_AP_SUPPORT
 #ifdef RTMP_MAC_PCI
 			/* if Tx fail >= 20, then clear TXWI ack in Tx Ring*/
@@ -2454,91 +2478,91 @@ VOID NICUpdateFifoStaCounters(
 				ClearTxRingClientAck(pAd, pEntry);	
 #endif /* RTMP_MAC_PCI */				
 #endif /* CONFIG_AP_SUPPORT */
-			}
-			else
-			{
+		}
+		else
+		{
 #ifdef DOT11_N_SUPPORT
-				if ((pEntry->PsMode != PWR_SAVE) && (pEntry->NoBADataCountDown > 0))
+			if ((pEntry->PsMode != PWR_SAVE) && (pEntry->NoBADataCountDown > 0))
+			{
+				pEntry->NoBADataCountDown--;
+				if (pEntry->NoBADataCountDown==0)
 				{
-					pEntry->NoBADataCountDown--;
-					if (pEntry->NoBADataCountDown==0)
-					{
-						DBGPRINT(RT_DEBUG_TRACE, ("@\n"));
-					}
+					DBGPRINT(RT_DEBUG_TRACE, ("@\n"));
 				}
+			}
 #endif /* DOT11_N_SUPPORT */
-				pEntry->FIFOCount = 0;
-				pEntry->OneSecTxNoRetryOkCount++;
+			pEntry->FIFOCount = 0;
+			pEntry->OneSecTxNoRetryOkCount++;
 
 
-				/* update NoDataIdleCount when sucessful send packet to STA.*/
-				pEntry->NoDataIdleCount = 0;
-				pEntry->ContinueTxFailCnt = 0;
+			/* update NoDataIdleCount when sucessful send packet to STA.*/
+			pEntry->NoDataIdleCount = 0;
+			pEntry->ContinueTxFailCnt = 0;
 #ifdef WDS_SUPPORT
-				pEntry->LockEntryTx = FALSE;
+			pEntry->LockEntryTx = FALSE;
 #endif /* WDS_SUPPORT */
 
 #ifdef CONFIG_STA_SUPPORT
 #ifdef DOT11Z_TDLS_SUPPORT
-				IF_DEV_CONFIG_OPMODE_ON_STA(pAd)
-				{
-					if(IS_ENTRY_TDLS(pEntry))
-						pEntry->TdlsTxFailCount = 0;
-				}
+			IF_DEV_CONFIG_OPMODE_ON_STA(pAd)
+			{
+				if(IS_ENTRY_TDLS(pEntry))
+					pEntry->TdlsTxFailCount = 0;
+			}
 #endif /* DOT11Z_TDLS_SUPPORT */
 #endif /* CONFIG_STA_SUPPORT */
-			}
+		}
 
-			succMCS = StaFifo.field.SuccessRate & 0x7F;
+		succMCS = StaFifo.field.SuccessRate & 0x7F;
 
 #ifdef DOT11N_SS3_SUPPORT
-			if (pEntry->HTCapability.MCSSet[2] == 0xff)
-			{
-				if (succMCS > pid)
-					pid = pid + 16;
-			}
+		if (pEntry->HTCapability.MCSSet[2] == 0xff)
+		{
+			if (succMCS > pid)
+				pid = pid + 16;
+		}
 #endif /* DOT11N_SS3_SUPPORT */
 
 
-			if (StaFifo.field.TxSuccess)
+		if (StaFifo.field.TxSuccess)
+		{
+			pEntry->TXMCSExpected[pid]++;
+			if (pid == succMCS)
 			{
-				pEntry->TXMCSExpected[pid]++;
-				if (pid == succMCS)
-				{
-					pEntry->TXMCSSuccessful[pid]++;
-				}
-				else 
-				{
-					pEntry->TXMCSAutoFallBack[pid][succMCS]++;
-				}
+				pEntry->TXMCSSuccessful[pid]++;
 			}
-			else
+			else 
 			{
-				pEntry->TXMCSFailed[pid]++;
+				pEntry->TXMCSAutoFallBack[pid][succMCS]++;
 			}
+		}
+		else
+		{
+			pEntry->TXMCSFailed[pid]++;
+		}
 
 #ifdef DOT11N_SS3_SUPPORT
-			if (pid >= 16 && succMCS <= 8)
-				succMCS += (2 - (succMCS >> 3)) * 7;
+		if (pid >= 16 && succMCS <= 8)
+			succMCS += (2 - (succMCS >> 3)) * 7;
 #endif /* DOT11N_SS3_SUPPORT */
 
-			reTry = pid - succMCS;
+		reTry = pid - succMCS;
 
-				if (reTry > 0)
-				{
-				/* MCS8 falls back to 0 */
-				if (pid>=8 && succMCS==0)
-					reTry -= 7;
-				else if ((pid >= 12) && succMCS <=7)
-				{
-					reTry -= 4;
-				}
-				pEntry->OneSecTxRetryOkCount += reTry;
+		if (reTry > 0)
+		{
+			/* MCS8 falls back to 0 */
+			if (pid>=8 && succMCS==0)
+				reTry -= 7;
+			else if ((pid >= 12) && succMCS <=7)
+			{
+				reTry -= 4;
 			}
+			pEntry->OneSecTxRetryOkCount += reTry;
+		}
 
-			i++;
-			/* ASIC store 16 stack*/
-		} while ( i < (TX_RING_SIZE<<1) );
+		i++;
+		/* ASIC store 16 stack*/
+	} while ( i < (TX_RING_SIZE<<1) );
 
 }
 
@@ -2736,6 +2760,7 @@ VOID NICUpdateRawCounters(
 	    	pAd->PrivateInfo.PhyRxErrCnt += RxStaCnt1.field.PlcpErr;
 			/* Update False CCA counter*/
 			pAd->RalinkCounters.OneSecFalseCCACnt += RxStaCnt1.field.FalseCca;
+			pAd->RalinkCounters.OneSecFalseCCACnt1 = RxStaCnt1.field.FalseCca;
 			pAd->RalinkCounters.FalseCCACnt += RxStaCnt1.field.FalseCca;
 #ifdef RALINK_ATE
 		}
@@ -2887,24 +2912,27 @@ VOID NICUpdateRawCounters(
 				pDiag->TxDescCnt[ArrayCurIdx][i]= 0;
 				pDiag->TxSWQueCnt[ArrayCurIdx][i] =0;
 				pDiag->TxMcsCnt[ArrayCurIdx][i] = 0;
+				pDiag->TxSGICnt[ArrayCurIdx][i] = 0;
 				pDiag->RxMcsCnt[ArrayCurIdx][i] = 0;
+				pDiag->RxSGICnt[ArrayCurIdx][i] = 0;
 			}
 			pDiag->TxDataCnt[ArrayCurIdx] = 0;
 			pDiag->TxFailCnt[ArrayCurIdx] = 0;
 			pDiag->RxDataCnt[ArrayCurIdx] = 0;
 			pDiag->RxCrcErrCnt[ArrayCurIdx]  = 0;
 /*			for (i = 9; i < 16; i++)*/
-			for (i = 9; i < 24; i++) /* 3*3*/
+			for (i = 9; i < MAX_MCS_SET; i++) /* 3*3*/
 			{
 				pDiag->TxDescCnt[ArrayCurIdx][i] = 0;
 				pDiag->TxMcsCnt[ArrayCurIdx][i] = 0;
+				pDiag->TxSGICnt[ArrayCurIdx][i] = 0;
 				pDiag->RxMcsCnt[ArrayCurIdx][i] = 0;
-}
+				pDiag->RxSGICnt[ArrayCurIdx][i] = 0;
+			}
 
 			if (pDiag->ArrayCurIdx == pDiag->ArrayStartIdx)
 				INC_RING_INDEX(pDiag->ArrayStartIdx,  DIAGNOSE_TIME);
 		}
-		
 	}
 #endif /* DBG_DIAGNOSE */
 
@@ -3128,6 +3156,15 @@ VOID UserCfgExit(
 #endif /* MAC_REPEATER_SUPPORT */
 
 	pAd->CommonCfg.bEnTemperatureTrack = FALSE;
+
+#ifdef CONFIG_AP_SUPPORT
+	IF_DEV_CONFIG_OPMODE_ON_AP(pAd)
+	{
+#ifdef BAND_STEERING
+		BndStrg_Release(pAd);
+#endif /* BAND_STEERING */
+	}
+#endif /* CONFIG_AP_SUPPORT */
 }
 
 /*
@@ -3205,6 +3242,12 @@ VOID	UserCfgInit(
 #endif /* RTMP_TEMPERATURE_COMPENSATION */
 #endif /* RTMP_INTERNAL_TX_ALC || RTMP_TEMPERATURE_COMPENSATION */
 
+#ifdef THERMAL_PROTECT_SUPPORT
+	pAd->force_one_tx_stream = FALSE;
+	pAd->last_thermal_pro_temp = 0;
+	pAd->thermal_pro_criteria = 80;
+#endif /* THERMAL_PROTECT_SUPPORT */
+	
 	pAd->RfIcType = RFIC_2820;
 
 	/* Init timer for reset complete event*/
@@ -3657,6 +3700,14 @@ VOID	UserCfgInit(
 	/* Default Config change flag*/
 	pAd->bConfigChanged = FALSE;
 
+#ifdef CONFIG_AP_SUPPORT
+	IF_DEV_CONFIG_OPMODE_ON_AP(pAd)
+	{
+		pAd->ApCfg.ScanChannelCnt = 0;
+		pAd->ApCfg.bImprovedScan = FALSE;
+	}
+#endif /* CONFIG_AP_SUPPORT */
+
 	/* */
 	/* part III. AP configurations*/
 	
@@ -3843,7 +3894,9 @@ VOID	UserCfgInit(
 
 #ifdef APCLI_SUPPORT
 		pAd->ApCfg.FlgApCliIsUapsdInfoUpdated = FALSE;
-
+#ifdef APCLI_CERT_SUPPORT
+		pAd->bApCliCertTest = FALSE;
+#endif /* APCLI_CERT_SUPPORT */
 		for(j = 0; j < MAX_APCLI_NUM; j++) 
 		{
 			pAd->ApCfg.ApCliTab[j].AuthMode = Ndis802_11AuthModeOpen;
@@ -3869,10 +3922,15 @@ VOID	UserCfgInit(
 			pAd->ApCfg.ApCliTab[j].SavedPMKNum=0;
 			RTMPZeroMemory(pAd->ApCfg.ApCliTab[j].SavedPMK, (PMKID_NO * sizeof(BSSID_INFO)));
 #endif/*APCLI_WPA_SUPPLICANT_SUPPORT*/
+			pAd->ApCfg.ApCliTab[j].bBlockAssoc=FALSE;
+			pAd->ApCfg.ApCliTab[j].MicErrCnt=0;
 
 		}
 #endif /* APCLI_SUPPORT */
 		pAd->ApCfg.EntryClientCount = 0;
+#ifdef MULTI_CLIENT_SUPPORT
+		pAd->ApCfg.ChangeTxOpClient = 0;
+#endif /* MULTI_CLIENT_SUPPORT */
 	}
 #endif /* CONFIG_AP_SUPPORT */
 
@@ -4006,6 +4064,10 @@ VOID	UserCfgInit(
 #ifdef MCS_LUT_SUPPORT
 	pAd->bUseHwTxLURate = TRUE;
 #endif /* MCS_LUT_SUPPORT */
+
+#ifdef PEER_DELBA_TX_ADAPT
+	pAd->MacTab.DelBA_Client_Count = 0;
+#endif /* PEER_DELBA_TX_ADAPT */
 
 #if defined(MICROWAVE_OVEN_SUPPORT) || defined(DYNAMIC_VGA_SUPPORT)
 	pAd->CommonCfg.MO_Cfg.bEnable = FALSE;
@@ -4152,7 +4214,7 @@ VOID	RTMP_TimerListAdd(
 	{
 		pObj->pRscObj = pRsc;
 		insertTailList(pRscList, (LIST_ENTRY *)pObj);
-//		DBGPRINT(RT_DEBUG_ERROR, ("%s: add timer obj %lx!\n", __FUNCTION__, (ULONG)pRsc));
+		DBGPRINT(RT_DEBUG_TRACE, ("%s: add timer obj %lx!\n", __FUNCTION__, (ULONG)pRsc));
 	}
 }
 
@@ -4198,7 +4260,7 @@ VOID	RTMP_TimerListRelease(
 
 
 /*
-	========================================================================
+========================================================================
 	
 	Routine Description:
 		Init timer objects
@@ -4232,10 +4294,10 @@ VOID	RTMPInitTimer(
 	/* It will crash if we cancel a timer or set a timer */
 	/* that we haven't initialize before.*/
 	/* */
-	pTimer->Valid      = TRUE;
-	
+	pTimer->Valid = TRUE;
+
 	pTimer->PeriodicType = Repeat;
-	pTimer->State      = FALSE;
+	pTimer->State = FALSE;
 	pTimer->cookie = (ULONG) pData;
 	pTimer->pAd = pAd;
 
@@ -4527,7 +4589,7 @@ static INT RtmpChipOpsRegister(
 	IN INT			infType)
 {
 	RTMP_CHIP_OP	*pChipOps = &pAd->chipOps;
-	int status;
+	int status = 0;
 	
 	memset(pChipOps, 0, sizeof(RTMP_CHIP_OP));
 
@@ -4574,12 +4636,12 @@ INT RtmpRaDevCtrlInit(
 
 #ifdef CONFIG_STA_SUPPORT
 	pAd->OpMode = OPMODE_STA;
-	DBGPRINT(RT_DEBUG_TRACE, ("STA Driver version-%s\n", STA_DRIVER_VERSION));
+	printk("APSoC STA Driver version: %s\n", STA_DRIVER_VERSION);
 #endif /* CONFIG_STA_SUPPORT */
 
 #ifdef CONFIG_AP_SUPPORT
 	pAd->OpMode = OPMODE_AP;
-	DBGPRINT(RT_DEBUG_ERROR, ("AP Driver version-%s\n", AP_DRIVER_VERSION));
+	printk("APSoC AP Driver version: %s\n", AP_DRIVER_VERSION);
 #endif /* CONFIG_AP_SUPPORT */
 
 #ifdef MULTIPLE_CARD_SUPPORT

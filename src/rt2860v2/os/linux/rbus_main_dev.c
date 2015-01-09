@@ -68,7 +68,6 @@ int rt2880_module_init(VOID)
 
 /*RtmpDevInit============================================== */
 	/* Allocate RTMP_ADAPTER adapter structure */
-/*	handle = kmalloc(sizeof(struct os_cookie) , GFP_KERNEL); */
 	os_alloc_mem(NULL, (UCHAR **)&handle, sizeof(struct os_cookie));
 	if (!handle)
 	{
@@ -105,7 +104,7 @@ int rt2880_module_init(VOID)
 	/* Here are the net_device structure with pci-bus specific parameters. */
 	net_dev->irq = dev_irq;			/* Interrupt IRQ number */
 	net_dev->base_addr = csr_addr;		/* Save CSR virtual address and irq to device structure */
-	((POS_COOKIE)handle)->pci_dev = net_dev;
+	((POS_COOKIE)handle)->pci_dev = (struct pci_dev *)net_dev;
 
 #ifdef CONFIG_STA_SUPPORT
     pAd->StaCfg.OriDevType = net_dev->type;
@@ -137,7 +136,7 @@ int rt2880_module_init(VOID)
 	
 	wl_proc_init();
 
-	DBGPRINT(RT_DEBUG_TRACE, ("%s: at CSR addr 0x%lx, IRQ %ld. \n", net_dev->name, (ULONG)csr_addr, net_dev->irq));
+	DBGPRINT(RT_DEBUG_TRACE, ("%s: at CSR addr 0x%lx, IRQ %d. \n", net_dev->name, (ULONG)csr_addr, net_dev->irq));
 
 	DBGPRINT(RT_DEBUG_TRACE, ("<=== rt2880_probe\n"));
 
@@ -188,11 +187,13 @@ VOID rt2880_module_exit(VOID)
 	RtmpOSNetDevFree(net_dev);
 	
 #if defined(CONFIG_RA_CLASSIFIER)&&(!defined(CONFIG_RA_CLASSIFIER_MODULE))
-    proc_ptr = proc_ralink_wl_video; 	 
-    if(ra_classifier_release_func!=NULL) 	 
-	    ra_classifier_release_func(); 	 
+	proc_ptr = proc_ralink_wl_video;
+	if(ra_classifier_release_func!=NULL)
+		ra_classifier_release_func();
 #endif
 
 	wl_proc_exit();
 }
 
+
+MODULE_LICENSE("Proprietary");

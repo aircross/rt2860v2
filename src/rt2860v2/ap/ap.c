@@ -323,7 +323,10 @@ VOID APStartUp(
 				WscOnOff(pAd, apidx, FALSE);
 		}
 #endif /* WSC_V2_SUPPORT */
-
+#ifdef BAND_STEERING
+		if (pAd->ApCfg.BandSteering && apidx == BSS0)
+			BndStrg_Init(pAd);
+#endif /* BAND_STEERING */
 	}
 
 #ifdef DOT11_N_SUPPORT
@@ -506,7 +509,7 @@ VOID APStartUp(
 #ifdef GREENAP_SUPPORT
 	if (pAd->ApCfg.bGreenAPEnable == TRUE)
 	{
-		RTMP_CHIP_ENABLE_AP_MIMOPS(pAd,TRUE);
+		RTMP_CHIP_ENABLE_AP_MIMOPS(pAd);
 		pAd->ApCfg.GreenAPLevel = GREENAP_WITHOUT_ANY_STAS_CONNECT;
 	}
 #endif /* GREENAP_SUPPORT */
@@ -1004,9 +1007,7 @@ VOID MacTableMaintenance(
 
 			if((pEntry->bReptCli) && (pEntry->bReptEthCli) && (pEntry->ReptCliIdleCount >= MAC_TABLE_AGEOUT_TIME))
 			{
-				MlmeEnqueue(pAd, APCLI_CTRL_STATE_MACHINE, APCLI_CTRL_DISCONNECT_REQ, 0, NULL,
-								(64 + (MAX_EXT_MAC_ADDR_SIZE * pEntry->MatchAPCLITabIdx) + pEntry->MatchReptCliIdx));
-				RTMP_MLME_HANDLER(pAd);
+				RTMPRemoveRepeaterDisconnectEntry(pAd, pEntry->MatchAPCLITabIdx, pEntry->MatchReptCliIdx);
 				RTMPRemoveRepeaterEntry(pAd, pEntry->MatchAPCLITabIdx, pEntry->MatchReptCliIdx);
 				continue;
 			}
@@ -1265,9 +1266,8 @@ VOID MacTableMaintenance(
 					{
 						apCliIdx = pReptEntry->MatchApCliIdx;
 						CliIdx = pReptEntry->MatchLinkIdx;
-						MlmeEnqueue(pAd, APCLI_CTRL_STATE_MACHINE, APCLI_CTRL_DISCONNECT_REQ, 0, NULL,
-										(64 + MAX_EXT_MAC_ADDR_SIZE*apCliIdx + CliIdx));
-						RTMP_MLME_HANDLER(pAd);
+
+						RTMPRemoveRepeaterDisconnectEntry(pAd, apCliIdx, CliIdx);
 						RTMPRemoveRepeaterEntry(pAd, apCliIdx, CliIdx);
 					}
 				}
@@ -1284,9 +1284,13 @@ VOID MacTableMaintenance(
 			pEntry->PsQIdleCount ++;  
 			if (pEntry->PsQIdleCount > 2) 
 			{
-				NdisAcquireSpinLock(&pAd->irq_lock);
+#ifdef RTMP_MAC_PCI
+				RTMP_IRQ_LOCK(&pAd->irq_lock, IrqFlags);
+#endif /* RTMP_MAC_PCI */
 				APCleanupPsQueue(pAd, &pEntry->PsQueue);
-				NdisReleaseSpinLock(&pAd->irq_lock);
+#ifdef RTMP_MAC_PCI
+				RTMP_IRQ_UNLOCK(&pAd->irq_lock, IrqFlags);
+#endif /* RTMP_MAC_PCI */
 				pEntry->PsQIdleCount = 0;
 				WLAN_MR_TIM_BIT_CLEAR(pAd, pEntry->apidx, pEntry->Aid);
 			}
@@ -1343,11 +1347,9 @@ VOID MacTableMaintenance(
 	{
 		if (pAd->CommonCfg.PreAntSwitch!=0 && pAd->Antenna.field.RxPath>1)
 		{
-			UCHAR antValue=0, r3Value;
+			UCHAR antValue=0, r3Value=0;
 
-			if (pMacTable->Size==1 &&
-				(lastClient >= 1 && lastClient < MAX_LEN_OF_MAC_TABLE)
-				)
+			if (pMacTable->Size==1 && (lastClient >= 1 && lastClient < MAX_LEN_OF_MAC_TABLE))
 			{
 				MAC_TABLE_ENTRY *pEntry = &pMacTable->Content[lastClient];
 
@@ -1454,31 +1456,19 @@ VOID MacTableMaintenance(
 		if(pAd->MacTab.fAnyStationIsHT == FALSE
 			&& pAd->ApCfg.bGreenAPEnable == TRUE)
 		{
-#ifdef RTMP_RBUS_SUPPORT
-#ifdef COC_SUPPORT
-			if ((pAd->MacTab.Size==0) &&
-				(pAd->ApCfg.GreenAPLevel != GREENAP_WITHOUT_ANY_STAS_CONNECT))
-			{
-				if (!RTMP_TEST_FLAG(pAd, fRTMP_ADAPTER_BSS_SCAN_IN_PROGRESS))
-					RTMP_CHIP_ENABLE_AP_MIMOPS(pAd,TRUE);
-				pAd->ApCfg.GreenAPLevel = GREENAP_WITHOUT_ANY_STAS_CONNECT;
-			}
-			else
-#endif /* COC_SUPPORT */
-#endif /* RTMP_RBUS_SUPPORT */
 			if (pAd->ApCfg.GreenAPLevel != GREENAP_ONLY_11BG_STAS)
 			{
 				if (!RTMP_TEST_FLAG(pAd, fRTMP_ADAPTER_BSS_SCAN_IN_PROGRESS))
-					RTMP_CHIP_ENABLE_AP_MIMOPS(pAd,FALSE);
+					RTMP_CHIP_ENABLE_AP_MIMOPS(pAd);
 				pAd->ApCfg.GreenAPLevel = GREENAP_ONLY_11BG_STAS;
 			}
 		}
 		else
 		{
-			if (pAd->ApCfg.GreenAPLevel!=GREENAP_11BGN_STAS)
+			if (pAd->ApCfg.GreenAPLevel != GREENAP_11BGN_STAS)
 			{
 				RTMP_CHIP_DISABLE_AP_MIMOPS(pAd);
-				pAd->ApCfg.GreenAPLevel=GREENAP_11BGN_STAS;
+				pAd->ApCfg.GreenAPLevel = GREENAP_11BGN_STAS;
 			}
 		}
 	}
@@ -1668,6 +1658,10 @@ BOOLEAN APPsIndicate(
 
 		if ((old_psmode == PWR_SAVE) && (Psm == PWR_ACTIVE))
 		{
+#ifdef DROP_MASK_SUPPORT
+			/* Disable Drop Mask */
+			set_drop_mask_per_client(pAd, pEntry, 2, 0);
+#endif /* DROP_MASK_SUPPORT */
 			/* TODO: For RT2870, how to handle about the BA when STA in PS mode???? */
 #ifdef RTMP_MAC_PCI
 #ifdef DOT11_N_SUPPORT
@@ -1679,6 +1673,12 @@ BOOLEAN APPsIndicate(
 			/* sleep station awakes, move all pending frames from PSQ to TXQ if any */
 			APHandleRxPsPoll(pAd, pAddr, pEntry->Aid, TRUE);
 		}
+#ifdef DROP_MASK_SUPPORT
+		else if ((old_psmode == PWR_ACTIVE) && (Psm == PWR_SAVE)) {
+			/* Enable Drop Mask */
+			set_drop_mask_per_client(pAd, pEntry, 2, 1);
+		}
+#endif /* DROP_MASK_SUPPORT */
 
 		/* move to above section */
 /*		pEntry->NoDataIdleCount = 0; */
@@ -1965,8 +1965,9 @@ BOOLEAN ApCheckAccessControlList(
 
     if (Result == FALSE)
     {
-        DBGPRINT(RT_DEBUG_TRACE, ("%02x:%02x:%02x:%02x:%02x:%02x failed in ACL checking\n",
-        pAddr[0],pAddr[1],pAddr[2],pAddr[3],pAddr[4],pAddr[5]));
+        CHAR *pRange = (pAd->CommonCfg.Channel <= 14) ? "2.4" : "5";
+        printk("AP %sGHz - access denied for client MAC [%02x:%02x:%02x:%02x:%02x:%02x]!\n",
+                pRange, pAddr[0], pAddr[1], pAddr[2], pAddr[3], pAddr[4], pAddr[5]);
     }
 
     return Result;
@@ -2411,7 +2412,7 @@ VOID APOverlappingBSSScan(
 				curPriChIdx = index;
 				curSecChIdx = ((index - 4) >=0 ) ? (index - 4) : 0;
 				chStartIdx =(curSecChIdx >= 3) ? (curSecChIdx - 3) : 0;
-				chEndIdx =  ((curPriChIdx + 3) < pAd->ChannelListNum) ? (curPriChIdx + 3) : (pAd->ChannelListNum - 1);;
+				chEndIdx =  ((curPriChIdx + 3) < pAd->ChannelListNum) ? (curPriChIdx + 3) : (pAd->ChannelListNum - 1);
 			}
 		}
 		else
@@ -2518,6 +2519,9 @@ VOID APOverlappingBSSScan(
 		pAd->CommonCfg.AddHTInfo.AddHtInfo.ExtChanOffset = 0;
 		pAd->CommonCfg.LastBSSCoexist2040.field.BSS20WidthReq = 1;
 		pAd->CommonCfg.Bss2040CoexistFlag |= BSS_2040_COEXIST_INFO_SYNC;
+		/* 2012/10/11 MTK patch while AP fall back to 20M, base band register didn't fall back to 20M */
+		pAd->CommonCfg.Bss2040NeedFallBack = 1;
+		pAd->CommonCfg.RegTransmitSetting.field.EXTCHA = 0;
 	}
 
 	return;	
