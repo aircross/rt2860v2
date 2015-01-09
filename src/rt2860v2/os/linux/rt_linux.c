@@ -1160,9 +1160,12 @@ static inline void __RtmpOSFSInfoChange(OS_FS_INFO * pOSFSInfo,
 		pOSFSInfo->fsuid = current->fsuid;
 		pOSFSInfo->fsgid = current->fsgid;
 		current->fsuid = current->fsgid = 0;
-#else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
 		pOSFSInfo->fsuid = current_fsuid();
 		pOSFSInfo->fsgid = current_fsgid();
+#else
+		pOSFSInfo->fsuid = *(int *)&current_fsuid();
+		pOSFSInfo->fsgid = *(int *)&current_fsgid();
 #endif
 		pOSFSInfo->fs = get_fs();
 		set_fs(KERNEL_DS);

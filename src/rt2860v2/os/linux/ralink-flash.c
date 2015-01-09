@@ -21,7 +21,8 @@
 #include <linux/mtd/concat.h>
 #include <linux/mtd/partitions.h>
 #include <asm/addrspace.h>
-#include "ralink-flash.h"
+#include <linux/version.h>
+//#include "ralink-flash.h"
 #include "rt_mmap.h"
 
 //fix
