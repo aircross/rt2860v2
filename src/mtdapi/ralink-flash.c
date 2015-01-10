@@ -22,8 +22,6 @@
 #include <linux/mtd/partitions.h>
 #include <asm/addrspace.h>
 #include <linux/version.h>
-//#include "ralink-flash.h"
-#include "rt_mmap.h"
 
 //fix
 #include <linux/delay.h>

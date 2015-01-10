@@ -69,7 +69,6 @@ rt2860v2_ap-objs += ../rt2860v2/os/linux/rt_rbus_pci_drv.o
 rt2860v2_ap-objs += ../rt2860v2/os/linux/rt_rbus_pci_util.o
 rt2860v2_ap-objs += ../rt2860v2/os/linux/ap_ioctl.o
 rt2860v2_ap-objs += ../rt2860v2/os/linux/rbus_main_dev.o
-rt2860v2_ap-objs += ../rt2860v2/os/linux/ralink-flash.o
 
 ifeq ($(CONFIG_RT2860V2_AP_BRIDGE_FASTPATH),y)
 rt2860v2_ap-objs += ../rt2860v2/os/linux/br_ftph.o
