@@ -7290,11 +7290,13 @@ INT	Show_Sat_Proc(
 					"\tWscConfStatus=%d\n"
 					"\tWscPinCode=%d\n"
 					"\tWscState=0x%x\n"
-					"\tWscStatus=0x%x\n",
+					"\tWscStatus=0x%x\n"
+					"\tWscLatestMacAddr=%s\n",
 					pWscCtrl->WscConfMode, 
 					((pWscCtrl->WscMode == WSC_PIN_MODE) ? "PIN" : "PBC"),
 					pWscCtrl->WscConfStatus, pWscCtrl->WscEnrolleePinCode, 
-					pWscCtrl->WscState, pWscCtrl->WscStatus);	
+					pWscCtrl->WscState, pWscCtrl->WscStatus,
+					PRINT_MAC(pAd->CommonCfg.LatestWSCMacAddr));	
 		}
 #endif /* WSC_INCLUDED */
 
@@ -8835,7 +8837,117 @@ done:
 extern VOID eFuseGetFreeBlockCount(PRTMP_ADAPTER pAd, PUINT EfuseFreeBlock);
 #endif /* RTMP_EFUSE_SUPPORT */
 
+VOID RTMPIoctlConnstatus(
+	IN PRTMP_ADAPTER pAd, 
+	IN RTMP_IOCTL_INPUT_STRUCT *wrq)
+{
+	INT Status;
+	PSTRING msg;
+    	UCHAR idx = 0;
+	UCHAR i = 0;
+	ULONG txCount = 0;
+	UINT32 rxCount = 0;
+ 	POS_COOKIE pObj;
+ 	UCHAR ifIndex;
+	BOOLEAN bConnect=FALSE;
+	UINT32 MaxWcidNum = MAX_LEN_OF_MAC_TABLE;
+	STRING	ChStr[24] = {0};
+/*	msg = (PSTRING)kmalloc(sizeof(CHAR)*(2048), MEM_ALLOC_FLAG); */
+	os_alloc_mem(pAd, (UCHAR **)&msg, sizeof(CHAR)*(2048));
+	if (msg == NULL) {
+		return;
+	}
 
+
+    memset(msg, 0x00, 1600);
+    sprintf(msg, "\n");
+
+ 	pObj = (POS_COOKIE) pAd->OS_Cookie;
+ 
+ 	DBGPRINT(RT_DEBUG_TRACE, ("==>RTMPIoctlConnstatus\n"));
+ 
+ 	if (pObj->ioctl_if_type != INT_APCLI)
+ 		return FALSE;
+ 
+ 	ifIndex = pObj->ioctl_if;
+
+#ifdef MAC_REPEATER_SUPPORT
+	if (pAd->ApCfg.bMACRepeaterEn)
+		MaxWcidNum = MAX_MAC_TABLE_SIZE_WITH_REPEATER;
+#endif /* MAC_REPEATER_SUPPORT */
+ 
+ 	//DBGPRINT(RT_DEBUG_OFF, ("=============================================================\n"));
+ 	sprintf(msg+strlen(msg), "=============================================================\n");
+ 	if((pAd->ApCfg.ApCliTab[ifIndex].CtrlCurrState == APCLI_CTRL_CONNECTED)
+ 		&& (pAd->ApCfg.ApCliTab[ifIndex].SsidLen != 0))
+ 	{
+ 		for (i=0; i<MaxWcidNum; i++)
+ 		{
+ 			PMAC_TABLE_ENTRY pEntry = &pAd->MacTab.Content[i];
+ 
+ 			if ( IS_ENTRY_APCLI(pEntry)
+				&& (pEntry->Sst == SST_ASSOC)
+				&& (pEntry->PortSecured == WPA_802_1X_PORT_SECURED))
+ 				{
+				 	sprintf(msg+strlen(msg), "ApCli%d Connected AP : %02X:%02X:%02X:%02X:%02X:%02X   SSID:%s\n",ifIndex,
+				 						pEntry->Addr[0], pEntry->Addr[1], pEntry->Addr[2],
+				 						pEntry->Addr[3], pEntry->Addr[4], pEntry->Addr[5],
+				 						pAd->ApCfg.ApCliTab[ifIndex].Ssid);
+					
+					bConnect=TRUE;
+ 				}
+ 		}
+
+		if (!bConnect)
+			 	sprintf(msg+strlen(msg), "ApCli%d Connected AP : Disconnect\n",ifIndex);
+
+ 	}
+ 	else
+ 	{
+
+		if (pAd->ApCfg.ApCliTab[ifIndex].ConnectState > APCLI_NOT_TRIGGER_CONNECT 
+			&& pAd->ApCfg.ApCliTab[ifIndex].FailReason == 0)
+			sprintf(ChStr,"Connecting");
+		else if (pAd->ApCfg.ApCliTab[ifIndex].ConnectState == APCLI_NOT_TRIGGER_CONNECT 
+			&& pAd->ApCfg.ApCliTab[ifIndex].FailReason == 0)	
+			sprintf(ChStr,"Not trigger connect");		
+		else if (pAd->ApCfg.ApCliTab[ifIndex].ConnectState == APCLI_NOT_TRIGGER_CONNECT 
+			&& pAd->ApCfg.ApCliTab[ifIndex].FailReason != 0)
+		{
+			switch(pAd->ApCfg.ApCliTab[ifIndex].FailReason) {
+				case 1 :
+					sprintf(ChStr,"Probe timeout");					
+					break;
+				case 2 :
+					sprintf(ChStr,"Auth fail");										
+					break;
+				case 3 :
+					sprintf(ChStr,"Assoc fail");										
+					break;
+				case 4 :
+					sprintf(ChStr,"4-way fail");										
+					break;
+				case 5 :
+					sprintf(ChStr,"unknow");										
+					break;					
+			}
+				
+		}
+			
+			
+		sprintf(msg+strlen(msg), "ApCli%d Connected AP : Disconnect reason = %s\n",ifIndex,ChStr);
+
+ 	}
+	sprintf(msg+strlen(msg), "=============================================================\n");
+
+	    wrq->u.data.length = strlen(msg);
+	    Status = copy_to_user(wrq->u.data.pointer, msg, wrq->u.data.length);
+
+	os_free_mem(NULL, msg);
+	
+     	DBGPRINT(RT_DEBUG_TRACE, ("<==RTMPIoctlConnStatus\n"));
+ 	return TRUE;	
+}
 /* 
     ==========================================================================
     Description:
@@ -9043,6 +9155,7 @@ VOID RTMPIoctlStatistics(
     }
     sprintf(msg+strlen(msg), "\n");
 #endif /* APCLI_SUPPORT */
+	sprintf(msg+strlen(msg), "WscLatestMacAddr=%02x:%02x:%02x:%02x:%02x:%02x\n", PRINT_MAC(pAd->CommonCfg.LatestWSCMacAddr));
 #endif /* WSC_AP_SUPPORT */
 #ifdef RTMP_EFUSE_SUPPORT
 	if (pAd->bUseEfuse == FALSE && pAd->bFroceEEPROMBuffer == FALSE)
@@ -9300,6 +9413,10 @@ INT Set_ApCli_Ssid_Proc(
 			pAd->ApCfg.ApCliTab[ifIndex].CfgSsidLen, pAd->ApCfg.ApCliTab[ifIndex].CfgSsid));
 
 		pAd->ApCfg.ApCliTab[ifIndex].Enable = apcliEn;
+
+		pAd->ApCfg.ApCliTab[ifIndex].ConnectState = APCLI_START_PROBE;
+		pAd->ApCfg.ApCliTab[ifIndex].FailReason = 0;
+		NdisGetSystemUpTime(&pAd->ApCfg.ApCliTab[ifIndex].LastTriggerTime);
 	}
 	else
 		success = FALSE;
@@ -12623,15 +12740,45 @@ INT RTMP_AP_IoctlHandle(
 		    break;
 
 #if defined (AP_SCAN_SUPPORT) || defined (CONFIG_STA_SUPPORT)
+		case CMD_RTPRIV_IOCTL_AP_SIOCSIWSCAN:
+		{	
+			PNET_DEV pNetDev = (PNET_DEV)pData;
+#ifdef AP_SCAN_SUPPORT			
+			if (pObj->ioctl_if_type == INT_APCLI)
+				RTMPIoctlSetSiteSurvey(pAd,wrq);
+			else
+				return NDIS_STATUS_FAILURE;
+#endif
+#ifdef CONFIG_STA_SUPPORT	
+				RTMPIoctlSetSiteSurvey(pAd,wrq);
+#endif
+
+		}
+			break;
+			
 		case CMD_RTPRIV_IOCTL_GSITESURVEY:
 			RTMPIoctlGetSiteSurvey(pAd,wrq);
 			break;
+
+		case CMD_RTPRIV_IOCTL_AP_SIOCGIWSCAN:
+		        if (Data == INT_APCLI)
+                        {
+                                RtmpIoctl_rt_ioctl_giwscan(pAd, pData, Data);
+                        }
+                        else
+                                return NDIS_STATUS_FAILURE;
+                        break;			
 #endif /* AP_SCAN_SUPPORT */
 
 		case CMD_RTPRIV_IOCTL_STATISTICS:
 			RTMPIoctlStatistics(pAd, wrq);
 			break;
 
+
+		case CMD_RTPRIV_IOCTL_CONNSTATUS:
+			RTMPIoctlConnstatus(pAd, wrq);
+			break;
+			
 #ifdef WSC_AP_SUPPORT
 		case CMD_RTPRIV_IOCTL_WSC_PROFILE:
 		    RTMPIoctlWscProfile(pAd, wrq);
@@ -12884,7 +13031,34 @@ INT RTMP_AP_IoctlHandle(
 			RtmpHostapdSecuritySet(pAd, wrq);
 			break;
 #endif /* HOSTAPD_SUPPORT */
-
+		case CMD_RTPRIV_IOCTL_AP_SIOCGIWENCODEEXT:
+			RtmpIoctl_rt_ioctl_giwencodeext(pAd, pData,Data);
+			break;
+		case CMD_RTPRIV_IOCTL_AP_SIOCGIWTXPOW:
+		{
+			UINT tmp = pAd->CommonCfg.TxPowerShow;
+			NdisCopyMemory(pData, &tmp, 4);
+			//(UINT)*(pData) =  pAd->ApCfg.RssiSample.LastRssi0 - pAd->BbpRssiToDbmDelta;
+			break;
+		}
+		case CMD_RTPRIV_IOCTL_AP_GET_PHYMODE:
+		{
+			UCHAR tmp = pAd->CommonCfg.PhyMode;
+			NdisCopyMemory(pData, &tmp, 1);			
+			break;
+		}	
+		case CMD_RTPRIV_IOCTL_AP_GET_SHORTGI:
+		{
+			UCHAR tmp = pAd->CommonCfg.RegTransmitSetting.field.ShortGI;
+			NdisCopyMemory(pData, &tmp, 1);			
+			break;
+		}
+		case CMD_RTPRIV_IOCTL_AP_GET_BW:
+		{
+			UCHAR tmp = pAd->CommonCfg.RegTransmitSetting.field.BW;
+			NdisCopyMemory(pData, &tmp, 1);			
+			break;
+		}		
 		default:
 			Status = RTMP_COM_IoctlHandle(pAd, wrq, cmd, subcmd, pData, Data);
 			break;

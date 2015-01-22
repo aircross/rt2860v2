@@ -478,6 +478,23 @@ typedef struct _ETHEREAL_RADIO {
 #define WIRESHARK_11N_FLAG_BW40             0x80
 #endif /* MONITOR_FLAG_11N_SNIFFER_SUPPORT */
     
+#define MBSS_PHY_MODE_RESET(__BssId, __HtPhyMode)                             \
+        {                                                                                                                       \
+                UCHAR __PhyMode = pAd->ApCfg.MBSSID[__BssId].PhyMode;   \
+                if ((__PhyMode == PHY_11B) &&                                                   \
+                        (__HtPhyMode.field.MODE != MODE_CCK))                           \
+                {                                                                                                               \
+                        __HtPhyMode.field.MODE = MODE_CCK;                                      \
+                        __HtPhyMode.field.MCS = 3;                                                      \
+                }                                                                                                               \
+                else if ((__PhyMode <= PHY_11G) &&                                              \
+                                (__PhyMode != PHY_11B) &&                                               \
+                                (__HtPhyMode.field.MODE != MODE_OFDM))                  \
+                {                                                                                                               \
+                        __HtPhyMode.field.MODE = MODE_OFDM;                                     \
+                        __HtPhyMode.field.MCS = 7;                                                      \
+                }                                                                                                               \
+        }
 
 
 #endif /* __RT_COMM_H__ */

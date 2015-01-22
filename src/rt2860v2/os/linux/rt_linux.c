@@ -858,7 +858,6 @@ VOID SendSignalToDaemon(
 }
 #endif /* CONFIG_AP_SUPPORT */
 
-#ifdef CONFIG_STA_SUPPORT
 INT32 ralinkrate[] = {
 2, 4, 11, 22,		/* CCK */
 12, 18, 24, 36, 48, 72, 96, 108,	/* OFDM */
@@ -874,8 +873,10 @@ INT32 ralinkrate[] = {
 /* 40MHz, 400ns GI, MCS: 0 ~ 15 */
 30, 60, 90, 120, 180, 240, 270, 300, 60, 120, 180, 240, 360, 480, 540, 600,
 90, 180, 270, 360, 540, 720, 810, 900};	/* 40MHz, 400ns GI, MCS: 16 ~ 23 */
-
 UINT32 RT_RateSize = sizeof (ralinkrate);
+
+#ifdef CONFIG_STA_SUPPORT
+
 
 void send_monitor_packets(IN PNET_DEV pNetDev,
 			  IN PNDIS_PACKET pRxPacket,
@@ -1820,14 +1821,12 @@ int RtmpOSNetDevAttach(
 #endif /*WIRELESS_EXT >= 12 */
 #endif /* CONFIG_STA_SUPPORT */
 
-#ifdef CONFIG_APSTA_MIXED_SUPPORT
 #if WIRELESS_EXT >= 12
 		if (OpMode == OPMODE_AP) {
 /*			pNetDev->wireless_handlers = &rt28xx_ap_iw_handler_def; */
 			pNetDev->wireless_handlers = pDevOpHook->iw_handler;
 		}
 #endif /*WIRELESS_EXT >= 12 */
-#endif /* CONFIG_APSTA_MIXED_SUPPORT */
 
 		/* copy the net device mac address to the net_device structure. */
 		NdisMoveMemory(pNetDev->dev_addr, &pDevOpHook->devAddr[0],

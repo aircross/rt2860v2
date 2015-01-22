@@ -7294,6 +7294,7 @@ Return Value:
 Note:
 ========================================================================
 */
+#if 0
 INT
 RtmpIoctl_rt_ioctl_giwscan(
 	IN	RTMP_ADAPTER			*pAd,
@@ -7367,7 +7368,7 @@ RtmpIoctl_rt_ioctl_giwscan(
 
 	return NDIS_STATUS_SUCCESS;
 }
-
+#endif
 
 /*
 ========================================================================
@@ -8320,7 +8321,7 @@ RtmpIoctl_rt_ioctl_siwencodeext(
 	return NDIS_STATUS_SUCCESS;
 }
 
-
+#if 0
 /*
 ========================================================================
 Routine Description:
@@ -8417,7 +8418,7 @@ RtmpIoctl_rt_ioctl_giwencodeext(
 
 	return NDIS_STATUS_SUCCESS;
 }
-
+#endif
 
 /*
 ========================================================================

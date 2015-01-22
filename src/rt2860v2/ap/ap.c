@@ -1284,9 +1284,9 @@ VOID MacTableMaintenance(
 			pEntry->PsQIdleCount ++;  
 			if (pEntry->PsQIdleCount > 2) 
 			{
-				NdisAcquireSpinLock(&pAd->irq_lock);
+				RTMP_IRQ_LOCK(&pAd->irq_lock, IrqFlags);
 				APCleanupPsQueue(pAd, &pEntry->PsQueue);
-				NdisReleaseSpinLock(&pAd->irq_lock);
+				RTMP_IRQ_UNLOCK(&pAd->irq_lock, IrqFlags);
 				pEntry->PsQIdleCount = 0;
 				WLAN_MR_TIM_BIT_CLEAR(pAd, pEntry->apidx, pEntry->Aid);
 			}

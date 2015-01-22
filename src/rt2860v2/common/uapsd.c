@@ -514,8 +514,12 @@ VOID UAPSD_PacketEnqueue(
 
 	pQueUapsd = &(pEntry->UAPSDQueue[IdAc]);
 
-	if (pQueUapsd->Number >= MAX_PACKETS_IN_UAPSD_QUEUE)
-    	{
+    #if 0 //ps patch
+    if (pQueUapsd->Number >= MAX_PACKETS_IN_UAPSD_QUEUE)
+    #else
+    if ((pQueUapsd->Number >= MAX_PACKETS_IN_UAPSD_QUEUE) || (pAd->TxSwQueue[IdAc].Number >= (pAd->TxSwQMaxLen+MAX_PACKETS_IN_UAPSD_QUEUE)))
+    #endif
+    {
 	        /* too much queued pkts, free (discard) the tx packet */
 	        DBGPRINT(RT_DEBUG_TRACE,
                  ("uapsd> many(%ld) WCID(%d) AC(%d)\n",

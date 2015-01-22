@@ -27,9 +27,778 @@
 
 
 #include "rt_config.h"
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,27)
+#define IWE_STREAM_ADD_EVENT(_A, _B, _C, _D, _E)                iwe_stream_add_event(_A, _B, _C, _D, _E)
+#define IWE_STREAM_ADD_POINT(_A, _B, _C, _D, _E)                iwe_stream_add_point(_A, _B, _C, _D, _E)
+#define IWE_STREAM_ADD_VALUE(_A, _B, _C, _D, _E, _F)    iwe_stream_add_value(_A, _B, _C, _D, _E, _F)
+#else
+#define IWE_STREAM_ADD_EVENT(_A, _B, _C, _D, _E)                iwe_stream_add_event(_B, _C, _D, _E)
+#define IWE_STREAM_ADD_POINT(_A, _B, _C, _D, _E)                iwe_stream_add_point(_B, _C, _D, _E)
+#define IWE_STREAM_ADD_VALUE(_A, _B, _C, _D, _E, _F)    iwe_stream_add_value(_B, _C, _D, _E, _F)
+#endif
 static BOOLEAN RT_isLegalCmdBeforeInfUp(
        IN PSTRING SetCmd);
+
+static void cal_quality(
+        IN RT_CMD_STA_IOCTL_BSS *pSignal,
+        IN BSS_ENTRY *pBssEntry)
+{
+        memcpy(pSignal->Bssid, pBssEntry->Bssid, MAC_ADDR_LEN);
+
+        /* Normalize Rssi */
+        if (pBssEntry->Rssi >= -50)
+        pSignal->ChannelQuality = 100;
+        else if (pBssEntry->Rssi >= -80) /* between -50 ~ -80dbm */
+                pSignal->ChannelQuality = (__u8)(24 + ((pBssEntry->Rssi + 80) * 26)/10);
+        else if (pBssEntry->Rssi >= -90)   /* between -80 ~ -90dbm */
+        pSignal->ChannelQuality = (__u8)((pBssEntry->Rssi + 90) * 26)/10;
+        else
+                pSignal->ChannelQuality = 0;
+
+    pSignal->Rssi = (__u8)(pBssEntry->Rssi);
+
+    if (pBssEntry->Rssi >= -70)
+                pSignal->Noise = -92;
+        else
+                pSignal->Noise = pBssEntry->Rssi - pBssEntry->MinSNR;
+}
+
+
+static void set_quality(
+                        struct iw_quality *iq,
+                        RT_CMD_STA_IOCTL_BSS *pBss)
+{
+        iq->qual = pBss->ChannelQuality;
+        iq->level = (__u8)(pBss->Rssi);
+        iq->noise = pBss->Noise;
+
+
+        iq->updated = 1;     /* Flags to know if updated */
+
+#if WIRELESS_EXT >= 17
+        iq->updated = IW_QUAL_QUAL_UPDATED | IW_QUAL_LEVEL_UPDATED | IW_QUAL_NOISE_UPDATED;
+#endif
+
+#if WIRELESS_EXT >= 19
+        iq->updated |= IW_QUAL_DBM;     /* Level + Noise are dBm */
+#endif
+}
+
+INT
+RtmpIoctl_rt_ioctl_giwscan(
+        IN      RTMP_ADAPTER                    *pAd,
+        IN      VOID                                    *pData,
+        IN      ULONG                                   Data)
+{
+	
+        RT_CMD_STA_IOCTL_SCAN_TABLE *pIoctlScan = (RT_CMD_STA_IOCTL_SCAN_TABLE *)pData;
+        RT_CMD_STA_IOCTL_BSS_TABLE *pBssTable;
+        BSS_ENTRY *pBssEntry;
+        UINT32 IdBss;
+
+
+        pIoctlScan->BssNr = 0;
+
+#ifdef MESH_SUPPORT
+        if(pIoctlScan->priv_flags == INT_MESH)
+        {
+                DBGPRINT(RT_DEBUG_TRACE, ("Mesh do not support rt_ioctl_giwscan \n"));
+                        return NDIS_STATUS_FAILURE;
+        }
+
+        if (pAd->MeshTab.MeshOnly == TRUE)
+                return NDIS_STATUS_SUCCESS;
+#endif /* MESH_SUPPORT */
+
+#ifdef WPA_SUPPLICANT_SUPPORT
+        if ((pAd->StaCfg.wpa_supplicant_info.WpaSupplicantUP & 0x7F) == WPA_SUPPLICANT_ENABLE)
+        {
+                pAd->StaCfg.wpa_supplicant_info.WpaSupplicantScanCount = 0;
+        }
+#endif /* WPA_SUPPLICANT_SUPPORT */
+
+        pIoctlScan->BssNr = pAd->ScanTab.BssNr;
+        if (pIoctlScan->BssNr == 0)
+                return NDIS_STATUS_SUCCESS;
+
+        os_alloc_mem(NULL, (UCHAR **)&(pIoctlScan->pBssTable),
+                                pAd->ScanTab.BssNr * sizeof(RT_CMD_STA_IOCTL_BSS_TABLE));
+        if (pIoctlScan->pBssTable == NULL)
+        {
+                DBGPRINT(RT_DEBUG_ERROR, ("Allocate memory fail!\n"));
+                return NDIS_STATUS_FAILURE;
+        }
+
+        for(IdBss=0; IdBss<pAd->ScanTab.BssNr; IdBss++)
+        {
+                HT_CAP_INFO capInfo = pAd->ScanTab.BssEntry[IdBss].HtCapability.HtCapInfo;
+
+                pBssTable = pIoctlScan->pBssTable + IdBss;
+                pBssEntry = &pAd->ScanTab.BssEntry[IdBss];
+
+                memcpy(pBssTable->Bssid, pBssEntry->Bssid, ETH_ALEN);
+                pBssTable->Channel = pBssEntry->Channel;
+                pBssTable->BssType = pBssEntry->BssType;
+                pBssTable->HtCapabilityLen = pBssEntry->HtCapabilityLen;
+                memcpy(pBssTable->SupRate, pBssEntry->SupRate, 12);
+                pBssTable->SupRateLen = pBssEntry->SupRateLen;
+                memcpy(pBssTable->ExtRate, pBssEntry->ExtRate, 12);
+                pBssTable->ExtRateLen = pBssEntry->ExtRateLen;
+                pBssTable->SsidLen = pBssEntry->SsidLen;
+                memcpy(pBssTable->Ssid, pBssEntry->Ssid, 32);
+                pBssTable->CapabilityInfo = pBssEntry->CapabilityInfo;
+                pBssTable->ChannelWidth = capInfo.ChannelWidth;
+                pBssTable->ShortGIfor40 = capInfo.ShortGIfor40;
+                pBssTable->ShortGIfor20 = capInfo.ShortGIfor20;
+                pBssTable->MCSSet = pBssEntry->HtCapability.MCSSet[1];
+#if defined(CONFIG_STA_SUPPORT) || defined(APCLI_SUPPORT)				
+                pBssTable->WpaIeLen = pBssEntry->WpaIE.IELen;
+                pBssTable->pWpaIe = pBssEntry->WpaIE.IE;
+                pBssTable->RsnIeLen = pBssEntry->RsnIE.IELen;
+                pBssTable->pRsnIe = pBssEntry->RsnIE.IE;
+#ifdef CONFIG_STA_SUPPORT
+                pBssTable->WpsIeLen = pBssEntry->WpsIE.IELen;
+                pBssTable->pWpsIe = pBssEntry->WpsIE.IE;
+#endif /* CONFIG_STA_SUPPORT */
+#endif 
+                pBssTable->FlgIsPrivacyOn = CAP_IS_PRIVACY_ON(pBssEntry->CapabilityInfo);
+                cal_quality(&pBssTable->Signal, pBssEntry);
+        }
+
+        memcpy(pIoctlScan->MainSharedKey[0], pAd->SharedKey[BSS0][0].Key, 16);
+        memcpy(pIoctlScan->MainSharedKey[1], pAd->SharedKey[BSS0][1].Key, 16);
+        memcpy(pIoctlScan->MainSharedKey[2], pAd->SharedKey[BSS0][2].Key, 16);
+        memcpy(pIoctlScan->MainSharedKey[3], pAd->SharedKey[BSS0][3].Key, 16);
+
+        return NDIS_STATUS_SUCCESS;
+}
+
+int rt_ioctl_giwscan(struct net_device *dev,
+			struct iw_request_info *info,
+			struct iw_point *data, char *extra)
+{
+	VOID *pAd = NULL;
+	int i=0, status = 0;
+	PSTRING current_ev = extra, previous_ev = extra;
+	PSTRING end_buf;
+	PSTRING current_val;
+	STRING custom[MAX_CUSTOM_LEN] = {0};
+#ifndef IWEVGENIE
+	unsigned char idx;
+#endif /* IWEVGENIE */
+	struct iw_event iwe;
+	RT_CMD_STA_IOCTL_SCAN_TABLE IoctlScan, *pIoctlScan = &IoctlScan;
+
+	GET_PAD_FROM_NET_DEV(pAd, dev);
+
+	/*check if the interface is down */
+/*    if(!RTMP_TEST_FLAG(pAd, fRTMP_ADAPTER_INTERRUPT_IN_USE)) */
+/* because android will set scan and get scan when interface down */
+#ifndef ANDROID_SUPPORT
+	if (RTMP_DRIVER_IOCTL_SANITY_CHECK(pAd, NULL) != NDIS_STATUS_SUCCESS)
+    {
+       	DBGPRINT(RT_DEBUG_TRACE, ("INFO::Network is down!\n"));
+        return -ENETDOWN;
+	}
+#endif /* ANDROID_SUPPORT */
+
+
+	pIoctlScan->priv_flags = RT_DEV_PRIV_FLAGS_GET(dev);
+	pIoctlScan->pBssTable = NULL;
+
+#ifdef CONFIG_STA_SUPPORT
+	if (RTMP_STA_IoctlHandle(pAd, NULL, CMD_RTPRIV_IOCTL_STA_SIOCGIWSCAN, 0,
+							pIoctlScan, 0,
+							RT_DEV_PRIV_FLAGS_GET(dev)) != NDIS_STATUS_SUCCESS)
+#else
+	if (RTMP_AP_IoctlHandle(pAd, NULL, CMD_RTPRIV_IOCTL_AP_SIOCGIWSCAN, 0,
+                                                        pIoctlScan,
+                                                        RT_DEV_PRIV_FLAGS_GET(dev)) != NDIS_STATUS_SUCCESS)
+#endif
+	{
+		status = -EINVAL;
+		goto go_out;
+	}
+
+	if (pIoctlScan->BssNr == 0)
+	{
+		data->length = 0;
+		status = 0;
+		goto go_out;
+	}
+
+#if WIRELESS_EXT >= 17
+    if (data->length > 0)
+        end_buf = extra + data->length;
+    else
+        end_buf = extra + IW_SCAN_MAX_DATA;
+#else
+    end_buf = extra + IW_SCAN_MAX_DATA;
+#endif
+
+	for (i = 0; i < pIoctlScan->BssNr; i++) 
+	{
+		if (current_ev >= end_buf)
+        {
+#if WIRELESS_EXT >= 17
+			status = -E2BIG;
+			goto go_out;
+#else
+			break;
+#endif
+        }
+		
+		/*MAC address */
+		/*================================ */
+		memset(&iwe, 0, sizeof(iwe));
+		iwe.cmd = SIOCGIWAP;
+		iwe.u.ap_addr.sa_family = ARPHRD_ETHER;
+				memcpy(iwe.u.ap_addr.sa_data, &pIoctlScan->pBssTable[i].Bssid, ETH_ALEN);
+
+        previous_ev = current_ev;
+		current_ev = IWE_STREAM_ADD_EVENT(info, current_ev,end_buf, &iwe, IW_EV_ADDR_LEN);
+        if (current_ev == previous_ev)
+        {
+#if WIRELESS_EXT >= 17
+            status = -E2BIG;
+			goto go_out;
+#else
+			break;
+#endif
+        }
+
+		/* 
+		Protocol:
+			it will show scanned AP's WirelessMode .
+			it might be
+					802.11a
+					802.11a/n
+					802.11g/n
+					802.11b/g/n
+					802.11g
+					802.11b/g
+		*/
+		memset(&iwe, 0, sizeof(iwe));
+		iwe.cmd = SIOCGIWNAME;
+
+
+	{
+		RT_CMD_STA_IOCTL_BSS_TABLE *pBssEntry=&pIoctlScan->pBssTable[i];
+		BOOLEAN isGonly=FALSE;
+		int rateCnt=0;
+
+		if (pBssEntry->Channel>14)
+		{
+			if (pBssEntry->HtCapabilityLen!=0)
+				strcpy(iwe.u.name,"802.11a/n");
+			else	
+				strcpy(iwe.u.name,"802.11a");
+		}
+		else
+		{
+			/*
+				if one of non B mode rate is set supported rate . it mean G only. 
+			*/
+			for (rateCnt=0;rateCnt<pBssEntry->SupRateLen;rateCnt++)
+			{									
+				/*
+					6Mbps(140) 9Mbps(146) and >=12Mbps(152) are supported rate , it mean G only. 
+				*/
+				if (pBssEntry->SupRate[rateCnt]==140 || pBssEntry->SupRate[rateCnt]==146 || pBssEntry->SupRate[rateCnt]>=152)
+					isGonly=TRUE;
+			}
+
+			for (rateCnt=0;rateCnt<pBssEntry->ExtRateLen;rateCnt++)
+			{
+				if (pBssEntry->ExtRate[rateCnt]==140 || pBssEntry->ExtRate[rateCnt]==146 || pBssEntry->ExtRate[rateCnt]>=152)
+					isGonly=TRUE;
+			}		
+			
+			
+			if (pBssEntry->HtCapabilityLen!=0)
+			{
+				if (isGonly==TRUE)
+					strcpy(iwe.u.name,"802.11g/n");
+				else
+					strcpy(iwe.u.name,"802.11b/g/n");
+			}
+			else
+			{
+				if (isGonly==TRUE)
+					strcpy(iwe.u.name,"802.11g");
+				else
+				{
+					if (pBssEntry->SupRateLen==4 && pBssEntry->ExtRateLen==0)
+						strcpy(iwe.u.name,"802.11b");
+					else
+						strcpy(iwe.u.name,"802.11b/g");		
+				}
+			}
+		}
+	}
+
+		previous_ev = current_ev;
+		current_ev = IWE_STREAM_ADD_EVENT(info, current_ev,end_buf, &iwe, IW_EV_ADDR_LEN);
+		if (current_ev == previous_ev)
+		{
+#if WIRELESS_EXT >= 17
+	   		status = -E2BIG;
+			goto go_out;
+#else
+			break;
+#endif
+		}
+
+		/*ESSID */
+		/*================================ */
+		memset(&iwe, 0, sizeof(iwe));
+		iwe.cmd = SIOCGIWESSID;
+		iwe.u.data.length = pIoctlScan->pBssTable[i].SsidLen;
+		iwe.u.data.flags = 1;
+ 
+        previous_ev = current_ev;
+	current_ev = IWE_STREAM_ADD_POINT(info, current_ev,end_buf, &iwe, (PSTRING) pIoctlScan->pBssTable[i].Ssid);
+        if (current_ev == previous_ev)
+        {
+#if WIRELESS_EXT >= 17
+            status = -E2BIG;
+			goto go_out;
+#else
+			break;
+#endif
+        }
+		
+		/*Network Type */
+		/*================================ */
+		memset(&iwe, 0, sizeof(iwe));
+		iwe.cmd = SIOCGIWMODE;
+		if (pIoctlScan->pBssTable[i].BssType == Ndis802_11IBSS)
+		{
+			iwe.u.mode = IW_MODE_ADHOC;
+		}
+		else if (pIoctlScan->pBssTable[i].BssType == Ndis802_11Infrastructure)
+		{
+			iwe.u.mode = IW_MODE_INFRA;
+		}
+		else
+		{
+			iwe.u.mode = IW_MODE_AUTO;
+		}
+		iwe.len = IW_EV_UINT_LEN;
+
+        previous_ev = current_ev;
+		current_ev = IWE_STREAM_ADD_EVENT(info, current_ev, end_buf, &iwe,  IW_EV_UINT_LEN);
+        if (current_ev == previous_ev)
+        {
+#if WIRELESS_EXT >= 17
+            status = -E2BIG;
+			goto go_out;
+#else
+			break;
+#endif
+        }
+
+		/*Channel and Frequency */
+		/*================================ */
+		memset(&iwe, 0, sizeof(iwe));
+		iwe.cmd = SIOCGIWFREQ;
+		{
+			UCHAR ch = pIoctlScan->pBssTable[i].Channel;
+			ULONG	m = 0;
+#ifdef CONFIG_STA_SUPPORT
+			RTMP_STA_IoctlHandle(pAd, NULL, CMD_RTPRIV_IOCTL_CHID_2_FREQ, 0,
+								(VOID *)&m, ch, RT_DEV_PRIV_FLAGS_GET(dev));
+#else
+			MAP_CHANNEL_ID_TO_KHZ(ch, m);
+#endif /* CONFIG_STA_SUPPORT */
+			iwe.u.freq.m = m * 100;
+			iwe.u.freq.e = 1;
+			iwe.u.freq.i = 0;
+			previous_ev = current_ev;
+			current_ev = IWE_STREAM_ADD_EVENT(info, current_ev,end_buf, &iwe, IW_EV_FREQ_LEN);
+        		if (current_ev == previous_ev)
+	        	{
+#if WIRELESS_EXT >= 17
+	            		status = -E2BIG;
+				goto go_out;
+#else
+				break;
+#endif
+			}	    
+		}	    
+
+	/*Add quality statistics */
+        /*================================ */
+        memset(&iwe, 0, sizeof(iwe));
+    	iwe.cmd = IWEVQUAL;
+    	iwe.u.qual.level = 0;
+    	iwe.u.qual.noise = 0;
+	set_quality(&iwe.u.qual, /*&pIoctlScan->pBssTable[i].Signal*/ &pIoctlScan->pBssTable[i]);
+    	current_ev = IWE_STREAM_ADD_EVENT(info, current_ev, end_buf, &iwe, IW_EV_QUAL_LEN);
+	if (current_ev == previous_ev)
+		{
+#if WIRELESS_EXT >= 17
+	            status = -E2BIG;
+				goto go_out;
+#else
+			break;
+#endif
+		}
+		/*Encyption key */
+		/*================================ */
+		memset(&iwe, 0, sizeof(iwe));
+		iwe.cmd = SIOCGIWENCODE;
+		if (pIoctlScan->pBssTable[i].FlgIsPrivacyOn)
+			iwe.u.data.flags =IW_ENCODE_ENABLED | IW_ENCODE_NOKEY;
+		else
+			iwe.u.data.flags = IW_ENCODE_DISABLED;
+
+        previous_ev = current_ev;		
+        current_ev = IWE_STREAM_ADD_POINT(info, current_ev, end_buf,&iwe, (char *)pIoctlScan->MainSharedKey[(iwe.u.data.flags & IW_ENCODE_INDEX)-1]);
+        if (current_ev == previous_ev)
+        {
+#if WIRELESS_EXT >= 17
+            status = -E2BIG;
+			goto go_out;
+#else
+			break;
+#endif
+        }
+
+		/*Bit Rate */
+		/*================================ */
+		if (pIoctlScan->pBssTable[i].SupRateLen)
+        {
+            UCHAR tmpRate = pIoctlScan->pBssTable[i].SupRate[pIoctlScan->pBssTable[i].SupRateLen-1];
+			memset(&iwe, 0, sizeof(iwe));
+			iwe.cmd = SIOCGIWRATE;
+    		current_val = current_ev + IW_EV_LCP_LEN;            
+            if (tmpRate == 0x82)
+                iwe.u.bitrate.value =  1 * 1000000;
+            else if (tmpRate == 0x84)
+                iwe.u.bitrate.value =  2 * 1000000;
+            else if (tmpRate == 0x8B)
+                iwe.u.bitrate.value =  5.5 * 1000000;
+            else if (tmpRate == 0x96)
+                iwe.u.bitrate.value =  11 * 1000000;
+            else
+    		    iwe.u.bitrate.value =  (tmpRate/2) * 1000000;
+            
+			if (pIoctlScan->pBssTable[i].ExtRateLen)
+			{
+				UCHAR tmpSupRate =(pIoctlScan->pBssTable[i].SupRate[pIoctlScan->pBssTable[i].SupRateLen-1]& 0x7f);
+				UCHAR tmpExtRate =(pIoctlScan->pBssTable[i].ExtRate[pIoctlScan->pBssTable[i].ExtRateLen-1]& 0x7f);
+				iwe.u.bitrate.value = (tmpSupRate > tmpExtRate) ? (tmpSupRate)*500000 : (tmpExtRate)*500000;	
+			}
+
+			if (tmpRate == 0x6c && pIoctlScan->pBssTable[i].HtCapabilityLen > 0)
+			{
+				
+/*				HT_CAP_INFO capInfo = pIoctlScan->pBssTable[i].HtCapability.HtCapInfo; */
+				int shortGI = pIoctlScan->pBssTable[i].ChannelWidth ? pIoctlScan->pBssTable[i].ShortGIfor40 : pIoctlScan->pBssTable[i].ShortGIfor20;
+				//int maxMCS = pIoctlScan->pBssTable[i].MCSSet ?  15 : 7;
+				int maxMCS = 7;
+#if 1				
+				int rate_count = RT_RateSize/sizeof(__s32);
+				int rate_index = 12 + ((UCHAR)pIoctlScan->pBssTable[i].ChannelWidth * 24) +
+								((UCHAR)shortGI *48) + ((UCHAR)maxMCS);				
+				if (rate_index < 0)
+					rate_index = 0;
+				if (rate_index >= rate_count)
+					rate_index = rate_count-1;
+				iwe.u.bitrate.value	=  ralinkrate[rate_index] * 500000;
+#else
+
+				if (pIoctlScan->pBssTable[i].HtCapabilityLen > 0)
+					RtmpDrvRateGet(pAd, MODE_HTMIX, shortGI,
+                      pIoctlScan->pBssTable[i].ChannelWidth, maxMCS,
+                      newRateGetAntenna(maxMCS), &iwe.u.bitrate.value);
+#endif
+			}
+            
+			iwe.u.bitrate.disabled = 0;
+			current_val = IWE_STREAM_ADD_VALUE(info, current_ev,
+				current_val, end_buf, &iwe,
+    			IW_EV_PARAM_LEN);            
+
+        	if((current_val-current_ev)>IW_EV_LCP_LEN)
+            	current_ev = current_val;
+        	else
+        	{
+#if WIRELESS_EXT >= 17
+                status = -E2BIG;
+				goto go_out;
+#else
+			    break;
+#endif
+        }
+        }
+
+#ifdef IWEVGENIE
+        /*WPA IE */
+		if (pIoctlScan->pBssTable[i].WpaIeLen > 0)
+        {
+			memset(&iwe, 0, sizeof(iwe));
+			memset(&custom[0], 0, MAX_CUSTOM_LEN);
+			memcpy(custom, &(pIoctlScan->pBssTable[i].pWpaIe[0]), 
+						   pIoctlScan->pBssTable[i].WpaIeLen);
+			iwe.cmd = IWEVGENIE;
+			iwe.u.data.length = pIoctlScan->pBssTable[i].WpaIeLen;
+			current_ev = IWE_STREAM_ADD_POINT(info, current_ev, end_buf, &iwe, custom);
+			if (current_ev == previous_ev)
+			{
+#if WIRELESS_EXT >= 17
+                status = -E2BIG;
+				goto go_out;
+#else
+			    break;
+#endif
+		}
+		}
+           
+		/*WPA2 IE */
+        if (pIoctlScan->pBssTable[i].RsnIeLen > 0)
+        {
+        	memset(&iwe, 0, sizeof(iwe));
+			memset(&custom[0], 0, MAX_CUSTOM_LEN);
+			memcpy(custom, &(pIoctlScan->pBssTable[i].pRsnIe[0]), 
+						   pIoctlScan->pBssTable[i].RsnIeLen);
+			iwe.cmd = IWEVGENIE;
+			iwe.u.data.length = pIoctlScan->pBssTable[i].RsnIeLen;
+			current_ev = IWE_STREAM_ADD_POINT(info, current_ev, end_buf, &iwe, custom);
+			if (current_ev == previous_ev)
+			{
+#if WIRELESS_EXT >= 17
+                status = -E2BIG;
+				goto go_out;
+#else
+			    break;
+#endif
+        }
+        }
+
+#ifdef CONFIG_STA_SUPPORT
+		/*WPS IE */
+		if (pIoctlScan->pBssTable[i].WpsIeLen > 0)
+        {
+        	memset(&iwe, 0, sizeof(iwe));
+			memset(&custom[0], 0, MAX_CUSTOM_LEN);
+			memcpy(custom, &(pIoctlScan->pBssTable[i].pWpsIe[0]), 
+						   pIoctlScan->pBssTable[i].WpsIeLen);
+			iwe.cmd = IWEVGENIE;
+			iwe.u.data.length = pIoctlScan->pBssTable[i].WpsIeLen;
+			current_ev = IWE_STREAM_ADD_POINT(info, current_ev, end_buf, &iwe, custom);
+			if (current_ev == previous_ev)
+			{
+#if WIRELESS_EXT >= 17
+                status = -E2BIG;
+				goto go_out;
+#else
+			    break;
+#endif
+        }
+        }
+
+#endif
+#else
+        /*WPA IE */
+		/*================================ */
+        if (pIoctlScan->pBssTable[i].WpaIeLen > 0)
+        {
+    		NdisZeroMemory(&iwe, sizeof(iwe));
+			memset(&custom[0], 0, MAX_CUSTOM_LEN);
+    		iwe.cmd = IWEVCUSTOM;
+            iwe.u.data.length = (pIoctlScan->pBssTable[i].WpaIeLen * 2) + 7;
+            NdisMoveMemory(custom, "wpa_ie=", 7);
+            for (idx = 0; idx < pIoctlScan->pBssTable[i].WpaIeLen; idx++)
+                sprintf(custom, "%s%02x", custom, pIoctlScan->pBssTable[i].pWpaIe[idx]);
+            previous_ev = current_ev;
+    		current_ev = IWE_STREAM_ADD_POINT(info, current_ev, end_buf, &iwe,  custom);
+            if (current_ev == previous_ev)
+            {
+#if WIRELESS_EXT >= 17
+                status = -E2BIG;
+				goto go_out;
+#else
+			    break;
+#endif
+        }
+        }
+
+        /*WPA2 IE */
+        if (pIoctlScan->pBssTable[i].RsnIeLen > 0)
+        {
+    		NdisZeroMemory(&iwe, sizeof(iwe));
+			memset(&custom[0], 0, MAX_CUSTOM_LEN);
+    		iwe.cmd = IWEVCUSTOM;
+            iwe.u.data.length = (pIoctlScan->pBssTable[i].RsnIeLen * 2) + 7;
+            NdisMoveMemory(custom, "rsn_ie=", 7);
+			for (idx = 0; idx < pIoctlScan->pBssTable[i].RsnIeLen; idx++)
+                sprintf(custom, "%s%02x", custom, pIoctlScan->pBssTable[i].pRsnIe[idx]);
+            previous_ev = current_ev;
+    		current_ev = IWE_STREAM_ADD_POINT(info, current_ev, end_buf, &iwe,  custom);
+            if (current_ev == previous_ev)
+            {
+#if WIRELESS_EXT >= 17
+                status = -E2BIG;
+				goto go_out;
+#else
+			    break;
+#endif
+        }
+        }
+
+#ifdef WSC_INCLUDED
+		/*WPS IE */
+		if (pIoctlScan->pBssTable[i].WpsIeLen > 0)
+        {
+    		NdisZeroMemory(&iwe, sizeof(iwe));
+			memset(&custom[0], 0, MAX_CUSTOM_LEN);
+    		iwe.cmd = IWEVCUSTOM;
+            iwe.u.data.length = (pIoctlScan->pBssTable[i].WpsIeLen * 2) + 7;
+            NdisMoveMemory(custom, "wps_ie=", 7);
+			for (idx = 0; idx < pIoctlScan->pBssTable[i].WpsIeLen; idx++)
+                sprintf(custom, "%s%02x", custom, pIoctlScan->pBssTable[i].pWpsIe[idx]);
+            previous_ev = current_ev;
+    		current_ev = IWE_STREAM_ADD_POINT(info, current_ev, end_buf, &iwe,  custom);
+            if (current_ev == previous_ev)
+            {
+#if WIRELESS_EXT >= 17
+                status = -E2BIG;
+				goto go_out;
+#else
+			    break;
+#endif
+        }
+        }
+#endif /* WSC_INCLUDED */
+
+#endif /* IWEVGENIE */
+	}
+
+	data->length = current_ev - extra;
+/*    pAd->StaCfg.bScanReqIsFromWebUI = FALSE; */
+/*	DBGPRINT(RT_DEBUG_ERROR ,("===>rt_ioctl_giwscan. %d(%d) BSS returned, data->length = %d\n",i , pAd->ScanTab.BssNr, data->length)); */
+
+#ifdef CONFIG_STA_SUPPORT
+	RTMP_STA_IoctlHandle(pAd, NULL, CMD_RTPRIV_IOCTL_STA_SCAN_END, 0,
+						NULL, data->length, RT_DEV_PRIV_FLAGS_GET(dev));
+#endif /* CONFIG_STA_SUPPORT */
+go_out:
+	if (pIoctlScan->pBssTable != NULL)
+		os_free_mem(NULL, pIoctlScan->pBssTable);
+
+	return status;
+}
+
+INT RtmpIoctl_rt_ioctl_giwencodeext(RTMP_ADAPTER *pAd, VOID *pData, ULONG Data)
+{
+        RT_CMD_STA_IOCTL_SECURITY *pIoctlSec = (RT_CMD_STA_IOCTL_SECURITY *)pData;
+        int idx;
+
+	POS_COOKIE	pObj = (POS_COOKIE) pAd->OS_Cookie;
+	NDIS_802_11_WEP_STATUS              WepStatus;
+	UCHAR ifIndex;
+	PMULTISSID_STRUCT	pMbss = NULL;
+	PAPCLI_STRUCT pApCliEntry = NULL;
+	UCHAR DefaultKeyId;
+	
+	ifIndex = pObj->ioctl_if;
+	if (pObj->ioctl_if_type == INT_APCLI)
+	{
+		pApCliEntry = &pAd->ApCfg.ApCliTab[ifIndex];
+		WepStatus = pApCliEntry-> WepStatus;
+		DefaultKeyId = pApCliEntry->DefaultKeyId;
+	}
+	else
+	{
+		pMbss = &pAd->ApCfg.MBSSID[ifIndex];	
+		WepStatus = pMbss-> WepStatus;
+		DefaultKeyId = pMbss->DefaultKeyId;
+	}
+        idx = pIoctlSec->KeyIdx;
+        if (idx)
+        {
+                if (idx < 1 || idx > 4)
+                {
+                        pIoctlSec->Status = RTMP_IO_EINVAL;
+                        return NDIS_STATUS_FAILURE;
+                }
+                idx--;
+
+                if ((WepStatus == Ndis802_11Encryption2Enabled) ||
+                        (WepStatus == Ndis802_11Encryption3Enabled))
+                {
+                        if (idx != DefaultKeyId)
+                        {
+                                pIoctlSec->Status = 0;
+                                pIoctlSec->length = 0;
+                                return NDIS_STATUS_FAILURE;
+                        }
+                }
+        }
+        else
+                idx = DefaultKeyId;
+
+        pIoctlSec->KeyIdx = idx + 1;
+
+        pIoctlSec->length = 0;
+        switch(WepStatus) {
+                case Ndis802_11WEPDisabled:
+                        pIoctlSec->Alg = RT_CMD_STA_IOCTL_SECURITY_ALG_NONE;
+                        pIoctlSec->flags |= RT_CMD_STA_IOCTL_SECURITY_DISABLED;
+                        break;
+                case Ndis802_11WEPEnabled:
+                        pIoctlSec->Alg = RT_CMD_STA_IOCTL_SECURITY_ALG_WEP;
+                        if (pAd->SharedKey[BSS0][idx].KeyLen > pIoctlSec->MaxKeyLen)
+                        {
+                                pIoctlSec->Status = RTMP_IO_E2BIG;
+                                return NDIS_STATUS_FAILURE;
+                        }
+                        else
+                        {
+                                pIoctlSec->length = pAd->SharedKey[BSS0][idx].KeyLen;
+                                pIoctlSec->pData = (PCHAR)&(pAd->SharedKey[BSS0][idx].Key[0]);
+                        }
+                        break;
+                case Ndis802_11Encryption2Enabled:
+                case Ndis802_11Encryption3Enabled:
+                        if (WepStatus == Ndis802_11Encryption2Enabled)
+                                pIoctlSec->Alg = RT_CMD_STA_IOCTL_SECURITY_ALG_TKIP;
+                        else
+                                pIoctlSec->Alg = RT_CMD_STA_IOCTL_SECURITY_ALG_CCMP;
+
+                        if (pIoctlSec->MaxKeyLen < 32)
+                        {
+                                pIoctlSec->Status = RTMP_IO_E2BIG;
+                                return NDIS_STATUS_FAILURE;
+                        }
+                        else
+                        {
+                                pIoctlSec->length = 32;
+#ifdef CONFIG_AP_SUPPORT
+				if (pObj->ioctl_if_type == INT_MAIN ||pObj->ioctl_if_type == INT_MBSSID )
+					pIoctlSec->pData = (PCHAR)&pAd->ApCfg.MBSSID[ifIndex].PMK[0];
+#ifdef APCLI_SUPPORT		
+				if (pObj->ioctl_if_type == INT_APCLI )
+					pIoctlSec->pData = (PCHAR)&pAd->ApCfg.ApCliTab[ifIndex].PMK[0];
+#endif /*APCLI_SUPPORT*/
+#endif /* CONFIG_AP_SUPPORT */                                
+
+#ifdef CONFIG_STA_SUPPORT
+					pIoctlSec->pData = (PCHAR)&pAd->StaCfg.PMK[0];
+#endif /* CONFIG_STA_SUPPORT */
+                       }
+                        break;
+                default:
+                        pIoctlSec->Status = RTMP_IO_EINVAL;
+                        return NDIS_STATUS_FAILURE;
+        }
+
+        return NDIS_STATUS_SUCCESS;
+}
+
+
 
 
 INT ComputeChecksum(
@@ -1278,7 +2047,7 @@ INT RTMP_COM_IoctlHandle(
 			PMAC_TABLE_ENTRY pMacEntry = NULL;
 #endif /* CONFIG_AP_SUPPORT */
 			RT_CMD_IW_STATS *pStats = (RT_CMD_IW_STATS *)pData;
-
+			printk("-->ra0 CMD_RTPRIV_IOCTL_INF_IW_STATUS_GET\n");
 			pStats->qual = 0;
 			pStats->level = 0;
 			pStats->noise = 0;
@@ -1355,10 +2124,19 @@ INT RTMP_COM_IoctlHandle(
 			if (CurOpMode == OPMODE_AP)
 			{
 				if (pMacEntry != NULL)
+				{
 					pStats->level =
 						RTMPMaxRssi(pAd, pMacEntry->RssiSample.AvgRssi0,
 										pMacEntry->RssiSample.AvgRssi1,
 										pMacEntry->RssiSample.AvgRssi2);
+				}
+				else
+				{
+					if ((pStats->priv_flags != INT_APCLI))
+						pStats->level =RTMPMaxRssi(pAd, pAd->ApCfg.RssiSample.AvgRssi0,
+												pAd->ApCfg.RssiSample.AvgRssi1,
+												pAd->ApCfg.RssiSample.AvgRssi2);
+				}
 #ifdef P2P_APCLI_SUPPORT
 				else
 					pStats->level =
@@ -1467,10 +2245,10 @@ INT RTMP_COM_IoctlHandle(
 #endif /* WDS_SUPPORT */
 			{
 				HtPhyMode = pAd->ApCfg.MBSSID[pObj->ioctl_if].HTPhyMode;
-#ifdef MBSS_SUPPORT
+//#ifdef MBSS_SUPPORT
 				/* reset phy mode for MBSS */
 				MBSS_PHY_MODE_RESET(pObj->ioctl_if, HtPhyMode);
-#endif /* MBSS_SUPPORT */
+//#endif /* MBSS_SUPPORT */
 			}
 			RtmpDrvMaxRateGet(pAd, HtPhyMode.field.MODE, HtPhyMode.field.ShortGI,
 							HtPhyMode.field.BW, HtPhyMode.field.MCS,

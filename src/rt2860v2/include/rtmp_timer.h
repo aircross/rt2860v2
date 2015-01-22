@@ -214,5 +214,7 @@ DECLARE_TIMER_FUNCTION(P2pCliReConnectTimeOut);
 #ifdef RALINK_ATE
 DECLARE_TIMER_FUNCTION(ATEPeriodicExec);
 #endif /* RALINK_ATE */
-
+#ifdef PEER_DELBA_TX_ADAPT
+DECLARE_TIMER_FUNCTION(PeerDelBATxAdaptTimeOut);
+#endif /* PEER_DELBA_TX_ADAPT */
 #endif /* __RTMP_TIMER_H__ */

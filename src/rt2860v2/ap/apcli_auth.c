@@ -313,6 +313,8 @@ static VOID ApCliMlmeAuthReqAction(
 #endif /* MAC_REPEATER_SUPPORT */
 		RTMPSetTimer(&pAd->ApCfg.ApCliTab[ifIndex].ApCliMlmeAux.ApCliAuthTimer, AUTH_TIMEOUT);
 		*pCurrState = APCLI_AUTH_WAIT_SEQ2;
+
+		pAd->ApCfg.ApCliTab[ifIndex].ConnectState = APCLI_START_AUTH;
 	} 
 	else
 	{
@@ -613,6 +615,7 @@ static VOID ApCliPeerAuthRspAtSeq4Action(
 			*pCurrState = APCLI_AUTH_REQ_IDLE;
 			MlmeEnqueue(pAd, APCLI_CTRL_STATE_MACHINE, APCLI_CTRL_AUTH_RSP,
 			sizeof(APCLI_CTRL_MSG_STRUCT), &ApCliCtrlMsg, ifIndex);
+			
 		}
 	} else
 	{

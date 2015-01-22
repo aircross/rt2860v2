@@ -4549,7 +4549,7 @@ VOID RT6352_AsicAdjustTxPower(
 	CHAR		DeltaPowerByBbpR1 = 0; 
 	CHAR		TotalDeltaPower = 0; /* (non-positive number) including the transmit power controlled by the MAC and the BBP R1 */
 	CONFIGURATION_OF_TX_POWER_CONTROL_OVER_MAC CfgOfTxPwrCtrlOverMAC = {0};	
-
+	ULONG	ExtraPwrOverMAC = 0;
 
 #ifdef CONFIG_STA_SUPPORT
 	if (RTMP_TEST_FLAG(pAd, fRTMP_ADAPTER_IDLE_RADIO_OFF))
@@ -4719,6 +4719,9 @@ VOID RT6352_AsicAdjustTxPower(
 
 			DBGPRINT(RT_DEBUG_TRACE, ("TotalDeltaPower=%d, Mac 0x13B4 is 0x%08x\n", TotalDeltaPower, MacValue));
 		}
+
+		RTMP_IO_READ32(pAd, 0x1318, &ExtraPwrOverMAC);
+		pAd->CommonCfg.TxPowerShow = 16  + (TotalDeltaPower/2)+((ExtraPwrOverMAC & 0x0000FF00) >> 8);
 
 		/* Extra set MAC registers to compensate Tx power if any */
 		RTMP_CHIP_ASIC_EXTRA_POWER_OVER_MAC(pAd);

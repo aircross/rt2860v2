@@ -1121,7 +1121,7 @@ typedef struct {
     UCHAR       EdcaUpdateCount;
 } QOS_CAPABILITY_PARM, *PQOS_CAPABILITY_PARM;
 
-#ifdef CONFIG_STA_SUPPORT
+#if defined(CONFIG_STA_SUPPORT) || defined(APCLI_SUPPORT)
 typedef struct {
     UCHAR       IELen;
     UCHAR       IE[MAX_CUSTOM_LEN];
@@ -1205,9 +1205,12 @@ typedef struct {
 #endif /* WSC_INCLUDED */
 
 
-#ifdef CONFIG_STA_SUPPORT
+#if defined(CONFIG_STA_SUPPORT) || defined(APCLI_SUPPORT)
     WPA_IE_     WpaIE;
     WPA_IE_     RsnIE;
+#endif
+
+#ifdef CONFIG_STA_SUPPORT	
 	WPA_IE_ 	WpsIE;
 #ifdef WAPI_SUPPORT
 	WPA_IE_     WapiIE;

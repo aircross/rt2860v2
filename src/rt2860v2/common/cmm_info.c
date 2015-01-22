@@ -3646,6 +3646,17 @@ VOID	RTMPCommSiteSurveyData(
 }
 
 #if defined (AP_SCAN_SUPPORT) || defined (CONFIG_STA_SUPPORT)
+VOID RTMPIoctlSetSiteSurvey(
+        IN      PRTMP_ADAPTER   pAdapter,
+        IN      RTMP_IOCTL_INPUT_STRUCT *wrq)
+{
+
+	NDIS_802_11_SSID Ssid;
+	NdisZeroMemory(&Ssid, sizeof(NDIS_802_11_SSID));
+
+	ApSiteSurvey(pAdapter, &Ssid, SCAN_ACTIVE, FALSE);
+}
+
 VOID RTMPIoctlGetSiteSurvey(
 	IN	PRTMP_ADAPTER	pAdapter, 
 	IN	RTMP_IOCTL_INPUT_STRUCT	*wrq)
@@ -3657,7 +3668,9 @@ VOID RTMPIoctlGetSiteSurvey(
     INT         max_len = LINE_LEN;		
 	PBSS_ENTRY	pBss;
 	UINT32 TotalLen, BufLen = IW_SCAN_MAX_DATA;
+	BSS_TABLE *pScanTab;
 
+	pScanTab = &pAdapter->ScanTab;
 #ifdef CONFIG_STA_SUPPORT
 #ifdef WSC_STA_SUPPORT
 	max_len += WPS_LINE_LEN;
@@ -3693,6 +3706,8 @@ VOID RTMPIoctlGetSiteSurvey(
 
 	while ((ScanRunning(pAdapter) == TRUE) && (WaitCnt++ < 200))
 		OS_WAIT(500);	
+
+	pScanTab = &pAdapter->ScanTab;
 
 	for(i=0; i<pAdapter->ScanTab.BssNr ;i++)
 	{

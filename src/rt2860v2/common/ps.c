@@ -265,6 +265,15 @@ VOID RtmpHandleRxPsPoll(
 /*                    (pAd->PortCfg.TxQueueSize + (MAX_PACKETS_IN_PS_QUEUE>>1))) */
 				{
 					pEntry = RemoveHeadQueue(&pMacEntry->PsQueue);
+#if 1 //ps patch
+                    if (pAd->TxSwQueue[QID_AC_BE].Number >= pAd->TxSwQMaxLen)
+                    {
+                        PNDIS_PACKET pPacket;
+                        pPacket = QUEUE_ENTRY_TO_PACKET(pEntry);
+                        RELEASE_NDIS_PACKET(pAd, pPacket, NDIS_STATUS_FAILURE);
+                        continue;
+                    }
+#endif
 					InsertTailQueueAc(pAd, pMacEntry, &pAd->TxSwQueue[QID_AC_BE], pEntry);
 				}
 /*                else */

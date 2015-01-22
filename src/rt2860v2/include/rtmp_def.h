@@ -1211,6 +1211,16 @@
 #define APCLI_CTRL_FUNC_SIZE              (APCLI_MAX_CTRL_STATE * APCLI_MAX_CTRL_MSG)
 
 
+/*woody*/
+#define APCLI_NOT_TRIGGER_CONNECT           0	/* merge NO_BSS,IBSS_IDLE,IBSS_ACTIVE and BSS in to 1 state */
+#define APCLI_START_PROBE                  1
+#define APCLI_START_AUTH                  2
+#define APCLI_RECE_AUTH                3
+#define APCLI_START_ASSOC                  4
+#define APCLI_RECE_ASSOC                 5
+#define APCLI_START_4WAY               6
+
+
 #endif /* APCLI_SUPPORT */
 
 #ifdef CONFIG_STA_SUPPORT

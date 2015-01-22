@@ -3668,13 +3668,17 @@ VOID BssEntrySet(
 		pBss->WscDPIDFromWpsAP = 0xFFFF;
 #endif /* WSC_INCLUDED */
 
-#ifdef CONFIG_STA_SUPPORT
+#if defined(CONFIG_STA_SUPPORT) || defined(APCLI_SUPPORT)
 		NdisZeroMemory(&pBss->WpaIE.IE[0], MAX_CUSTOM_LEN);
 		NdisZeroMemory(&pBss->RsnIE.IE[0], MAX_CUSTOM_LEN);
-		NdisZeroMemory(&pBss->WpsIE.IE[0], MAX_CUSTOM_LEN);
 		pBss->WpaIE.IELen = 0;
 		pBss->RsnIE.IELen = 0;
+		
+#endif 
+
+#ifdef CONFIG_STA_SUPPORT
 		pBss->WpsIE.IELen = 0;
+		NdisZeroMemory(&pBss->WpsIE.IE[0], MAX_CUSTOM_LEN);		
 #ifdef WAPI_SUPPORT
 		NdisZeroMemory(&pBss->WapiIE.IE[0], MAX_CUSTOM_LEN);
 		pBss->WapiIE.IELen = 0;
@@ -3714,7 +3718,7 @@ VOID BssEntrySet(
 #endif /* CONFIG_STA_SUPPORT */
 						break;
 					}
-#ifdef CONFIG_STA_SUPPORT
+#if defined(CONFIG_STA_SUPPORT) || defined(APCLI_SUPPORT)
 					if (NdisEqualMemory(pEid->Octet, WPA_OUI, 4))
 					{
 						if ((pEid->Len + 2) > MAX_CUSTOM_LEN)
@@ -3725,10 +3729,8 @@ VOID BssEntrySet(
 						pBss->WpaIE.IELen = pEid->Len + 2;
 						NdisMoveMemory(pBss->WpaIE.IE, pEid, pBss->WpaIE.IELen);
 					}
-#endif /* CONFIG_STA_SUPPORT */
 					break;
 
-#ifdef CONFIG_STA_SUPPORT
 				case IE_RSN:
 					if (NdisEqualMemory(pEid->Octet + 2, RSN_OUI, 3))
 					{
@@ -3741,6 +3743,9 @@ VOID BssEntrySet(
 						NdisMoveMemory(pBss->RsnIE.IE, pEid, pBss->RsnIE.IELen);
 					}
 					break;
+#endif
+
+#ifdef CONFIG_STA_SUPPORT					
 #ifdef WAPI_SUPPORT
 				case IE_WAPI:
 					if (NdisEqualMemory(pEid->Octet + 4, WAPI_OUI, 3))

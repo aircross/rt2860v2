@@ -7053,8 +7053,11 @@ VOID WscInit(
 				APUpdateBeaconFrame(pAd, pWscControl->EntryIfIdx & 0x0F);
 			}
 		}
+		NdisZeroMemory(pAd->CommonCfg.LatestWSCMacAddr,MAC_ADDR_LEN);
 #endif /* CONFIG_AP_SUPPORT */        
 	}
+
+	NdisZeroMemory(pAd->CommonCfg.LatestWSCMacAddr,MAC_ADDR_LEN);
 }
 
 USHORT WscGetAuthType(
@@ -9050,9 +9053,11 @@ VOID	WscCreateProfileFromCfg(
     
 #ifdef WSC_V2_SUPPORT
 	if (pWscControl->WscV2Info.bEnableWpsV2 && (OpMode & REGISTRAR_ACTION))
-		NdisMoveMemory(pCredential->MacAddr, pWscControl->EntryAddr, 6);
+		NdisMoveMemory(pCredential->MacAddr, pWscControl->EntryAddr, MAC_ADDR_LEN);
 #endif /* WSC_V2_SUPPORT */
-    
+   
+	NdisMoveMemory(pAd->CommonCfg.LatestWSCMacAddr, pWscControl->EntryAddr, MAC_ADDR_LEN);
+ 
     DBGPRINT(RT_DEBUG_TRACE, ("<----- WscCreateProfileFromCfg\n"));
 
 }
@@ -11312,7 +11317,6 @@ VOID	WscCheckPeerDPID(
 			/* Found device password ID*/
 			NdisMoveMemory(&DevicePasswordID, pData + 4, sizeof(DevicePasswordID));
 			DevicePasswordID = be2cpu16(DevicePasswordID);
-			DBGPRINT(RT_DEBUG_TRACE, ("%s : DevicePasswordID = 0x%04x\n", __FUNCTION__, DevicePasswordID));
 			if (DevicePasswordID == DEV_PASS_ID_PBC)	/* Check for PBC value*/
 			{
 				WscPBC_DPID_FromSTA(pAd, Fr->Hdr.Addr2);

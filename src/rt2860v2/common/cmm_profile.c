@@ -3284,10 +3284,10 @@ NDIS_STATUS	RTMPSetProfileParameters(
 			if (RTMPGetKeyParameter("AutoChannelSkipList", tmpbuf, 50, pBuffer, FALSE))
 			{		
 				pAd->ApCfg.AutoChannelSkipListNum = delimitcnt(tmpbuf, ";") + 1;
-				if ( pAd->ApCfg.AutoChannelSkipListNum > 10 )
+				if ( pAd->ApCfg.AutoChannelSkipListNum > 24 )
 				{
 					DBGPRINT(RT_DEBUG_TRACE, ("Your no. of AutoChannelSkipList( %d ) is larger than 10 (boundary)\n",pAd->ApCfg.AutoChannelSkipListNum));
-					pAd->ApCfg.AutoChannelSkipListNum = 10;
+					pAd->ApCfg.AutoChannelSkipListNum = 24;
 				}
 						
 				for (i = 0, macptr = rstrtok(tmpbuf,";"); macptr ; macptr = rstrtok(NULL,";"), i++)

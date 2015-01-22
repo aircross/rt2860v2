@@ -43,7 +43,7 @@
 	So MBSS_PHY_MODE_RESET() can help us to adjust the correct mode &
 	maximum MCS for the BSS.
 */
-#define MBSS_PHY_MODE_RESET(__BssId, __HtPhyMode)				\
+/*#define MBSS_PHY_MODE_RESET(__BssId, __HtPhyMode)				\
 	{															\
 		UCHAR __PhyMode = pAd->ApCfg.MBSSID[__BssId].PhyMode;	\
 		if ((__PhyMode == PHY_11B) &&							\
@@ -60,7 +60,7 @@
 			__HtPhyMode.field.MCS = 7;							\
 		}														\
 	}
-
+*/
 
 /* Public function list */
 INT	Show_MbssInfo_Display_Proc(

@@ -171,9 +171,7 @@ extern	const struct iw_handler_def rt28xx_iw_handler_def;
 #endif /* RTMP_RBUS_SUPPORT */
 #endif /* SINGLE_SKU_V2 */
 
-#ifdef CONFIG_APSTA_MIXED_SUPPORT
 extern	const struct iw_handler_def rt28xx_ap_iw_handler_def;
-#endif /* CONFIG_APSTA_MIXED_SUPPORT */
 
 /***********************************************************************************
  *	Compiler related definitions

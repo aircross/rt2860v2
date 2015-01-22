@@ -234,8 +234,39 @@ VOID APMlmePeriodicExec(
 				MlmeCalculateChannelQuality(pAd,
 					&pAd->MacTab.Content[pApCliEntry->MacTabWCID], Now32);
 			}
+
+			//woody 
+				if (pAd->ApCfg.ApCliTab[loop].ConnectState > APCLI_NOT_TRIGGER_CONNECT)
+				{
+					if (RTMP_TIME_AFTER(Now32, pAd->ApCfg.ApCliTab[loop].LastTriggerTime + (10*OS_HZ)))
+					{
+						switch(pAd->ApCfg.ApCliTab[loop].ConnectState)
+						{
+							case APCLI_START_PROBE:
+								pAd->ApCfg.ApCliTab[loop].FailReason=1;
+								break;
+							case APCLI_START_AUTH:
+								pAd->ApCfg.ApCliTab[loop].FailReason=2;
+								break;	
+							case APCLI_START_ASSOC:
+								pAd->ApCfg.ApCliTab[loop].FailReason=3;
+								break;	
+							case APCLI_START_4WAY:
+								pAd->ApCfg.ApCliTab[loop].FailReason=4;
+								break;	
+							default:	
+								pAd->ApCfg.ApCliTab[loop].FailReason=5;
+						}
+
+						pAd->ApCfg.ApCliTab[loop].ConnectState = APCLI_NOT_TRIGGER_CONNECT;
+					}
+					else
+						pAd->ApCfg.ApCliTab[loop].FailReason=0;
+				}
 		}
 	}
+
+
 #endif /* APCLI_SUPPORT */
 
 #ifdef DOT11_N_SUPPORT

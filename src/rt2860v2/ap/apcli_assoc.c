@@ -602,6 +602,7 @@ static VOID ApCliMlmeAssocReqAction(
 #endif /* MAC_REPEATER_SUPPORT */
 		RTMPSetTimer(&pApCliEntry->ApCliMlmeAux.ApCliAssocTimer, Timeout);
 		*pCurrState = APCLI_ASSOC_WAIT_RSP;
+		pAd->ApCfg.ApCliTab[ifIndex].ConnectState = APCLI_START_ASSOC;
 	} 
 	else
 	{

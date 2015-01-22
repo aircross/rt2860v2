@@ -1728,7 +1728,7 @@ VOID AsicAdjustTxPower(
 	RTMP_CHIP_ASIC_AUTO_AGC_OFFSET_GET(
 		pAd, &DeltaPwr, &TotalDeltaPower, &TxAgcCompensate, &DeltaPowerByBbpR1);
 
-	DBGPRINT(RT_DEBUG_INFO, ("%s: DeltaPwr=%d, TotalDeltaPower=%d, TxAgcCompensate=%d, DeltaPowerByBbpR1=%d\n",
+	DBGPRINT(RT_DEBUG_TRACE, ("%s: DeltaPwr=%d, TotalDeltaPower=%d, TxAgcCompensate=%d, DeltaPowerByBbpR1=%d\n",
 			__FUNCTION__,
 			DeltaPwr,
 			TotalDeltaPower,
@@ -1759,6 +1759,7 @@ VOID AsicAdjustTxPower(
 	/* The transmit power controlled by the MAC */
 	TotalDeltaPower += DeltaPwr; 	
 
+	printk("TotalDeltaPower = %d\n",TotalDeltaPower);
 #ifdef SINGLE_SKU
 	if (pAd->CommonCfg.bSKUMode == TRUE)
 	{

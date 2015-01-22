@@ -679,7 +679,7 @@ static VOID ApCliCtrlAuthRspAction(
 #ifdef MAC_REPEATER_SUPPORT
 		ifIndex = (USHORT)(Elem->Priv);
 #endif /* MAC_REPEATER_SUPPORT */
-
+		pAd->ApCfg.ApCliTab[ifIndex].ConnectState = APCLI_RECE_AUTH;
 		MlmeEnqueue(pAd, APCLI_ASSOC_STATE_MACHINE, APCLI_MT2_MLME_ASSOC_REQ,
 			sizeof(MLME_ASSOC_REQ_STRUCT), &AssocReq, ifIndex);
 	} 
@@ -990,6 +990,7 @@ static VOID ApCliCtrlAssocRspAction(
 		if (ApCliLinkUp(pAd, ifIndex))
 		{
 			*pCurrState = APCLI_CTRL_CONNECTED;
+			pAd->ApCfg.ApCliTab[ifIndex].ConnectState = APCLI_RECE_ASSOC;
 		}
 		else
 		{

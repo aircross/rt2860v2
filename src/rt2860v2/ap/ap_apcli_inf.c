@@ -86,6 +86,7 @@ VOID RT28xx_ApCli_Init(
 	netDevOpHook.stop = ApCli_VirtualIF_Close;
 	netDevOpHook.xmit = ApCli_VirtualIF_PacketSend;
 	netDevOpHook.ioctl = ApCli_VirtualIF_Ioctl;
+	netDevOpHook.iw_handler = (struct iw_handler_def *) &rt28xx_ap_iw_handler_def;
 	RTMP_AP_IoctlHandle(pAd, NULL, CMD_RTPRIV_IOCTL_APC_INIT,
 						0, &netDevOpHook, 0);
 }

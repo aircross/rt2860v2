@@ -1776,6 +1776,7 @@ typedef struct _COMMON_CONFIG {
 #ifdef WSC_INCLUDED
 	/* WSC hardware push button function 0811 */
 	UINT8 WscHdrPshBtnCheckCount;
+	UCHAR LatestWSCMacAddr[MAC_ADDR_LEN];
 #endif				/* WSC_INCLUDED */
 
 
@@ -1893,6 +1894,7 @@ typedef struct _COMMON_CONFIG {
 	MO_CFG_STRUCT MO_Cfg;	/* data structure for mitigating microwave interference */
 #endif /* defined(MICROWAVE_OVEN_SUPPORT) || defined(DYNAMIC_VGA_SUPPORT) */
 	BOOLEAN bEnTemperatureTrack;
+	UCHAR TxPowerShow;
 } COMMON_CONFIG, *PCOMMON_CONFIG;
 
 #ifdef DBG_CTRL_SUPPORT
@@ -2521,6 +2523,7 @@ typedef struct _MAC_TABLE_ENTRY {
 
 #ifdef PEER_DELBA_TX_ADAPT
 	BOOLEAN bPeerDelBaTxAdaptEn;
+	RALINK_TIMER_STRUCT DelBA_tx_AdaptTimer;
 #endif /* PEER_DELBA_TX_ADAPT */
 
 #ifdef MFB_SUPPORT
@@ -3024,6 +3027,10 @@ typedef struct _APCLI_STRUCT {
 #endif /* MAC_REPEATER_SUPPORT */
 	UCHAR LinkIdx;
 	PVOID pAd;
+
+	UCHAR ConnectState;
+	UCHAR FailReason;
+	ULONG   LastTriggerTime;
 } APCLI_STRUCT, *PAPCLI_STRUCT;
 
 typedef struct _AP_ADMIN_CONFIG {
@@ -3080,7 +3087,7 @@ typedef struct _AP_ADMIN_CONFIG {
 	UCHAR AutoChannel_Channel;	/* channel number during Auto Channel Selection */
 	UCHAR current_channel_index;	/* current index of channel list */
 	UCHAR AutoChannelSkipListNum;	/* number of rejected channel list */
-	UCHAR AutoChannelSkipList[10];
+	UCHAR AutoChannelSkipList[24];
 	UCHAR DtimCount;	/* 0.. DtimPeriod-1 */
 	UCHAR DtimPeriod;	/* default = 3 */
 	UCHAR ErpIeContent;
@@ -8955,6 +8962,11 @@ PNDIS_PACKET RTMPDeFragmentDataFrame(
 VOID RTMPIoctlGetSiteSurvey(
 	IN	PRTMP_ADAPTER	pAdapter, 
 	IN	RTMP_IOCTL_INPUT_STRUCT *wrq);
+
+VOID RTMPIoctlSetSiteSurvey(
+        IN      RTMP_ADAPTER *pAd,
+        IN      RTMP_IOCTL_INPUT_STRUCT *wrq);
+
 #endif
 
 #ifdef CONFIG_AP_SUPPORT
@@ -9978,5 +9990,26 @@ UCHAR GetSkuPerRatePwr(
 	IN UCHAR bw,
 	IN INT32 paValue);
 #endif /* SINGLE_SKU_V2 */
+
+INT RtmpIoctl_rt_ioctl_giwencodeext(RTMP_ADAPTER *pAd, VOID *pData, ULONG Data);
+INT RtmpIoctl_rt_ioctl_giwscan(
+        IN      RTMP_ADAPTER                    *pAd,
+        IN      VOID                                    *pData,
+        IN      ULONG                                   Data);
+
+int rt_ioctl_giwscan(struct net_device *dev, struct iw_request_info *info,
+                        struct iw_point *data, char *extra);
+
+#ifdef PEER_DELBA_TX_ADAPT
+VOID Peer_DelBA_Tx_Adapt_Init(
+	IN PRTMP_ADAPTER pAd,
+	IN PMAC_TABLE_ENTRY pEntry);
+
+VOID PeerDelBATxAdaptTimeOut(
+	IN PVOID SystemSpecific1,
+	IN PVOID FunctionContext,
+	IN PVOID SystemSpecific2,
+	IN PVOID SystemSpecific3);
+#endif /* PEER_DELBA_TX_ADAPT */
 #endif  /* __RTMP_H__ */
 

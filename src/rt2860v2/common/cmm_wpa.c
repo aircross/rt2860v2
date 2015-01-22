@@ -1073,6 +1073,8 @@ VOID PeerPairMsg1Action(
 			group_cipher = pAd->ApCfg.ApCliTab[IfIndex].GroupCipher;
 			rsnie_ptr = pAd->ApCfg.ApCliTab[IfIndex].RSN_IE;
 			rsnie_len = pAd->ApCfg.ApCliTab[IfIndex].RSNIE_Len;
+
+			pAd->ApCfg.ApCliTab[IfIndex].ConnectState = APCLI_START_4WAY;
 		}
 #endif /* APCLI_SUPPORT */			
 	}
@@ -1396,7 +1398,7 @@ VOID PeerPairMsg3Action(
 	USHORT ifIndex = (USHORT)(Elem->Priv);
 	UCHAR CliIdx = 0xFF;
 #endif /* MAC_REPEATER_SUPPORT */
-
+	UINT				IfIndex = 0;
 	DBGPRINT(RT_DEBUG_TRACE, ("===> PeerPairMsg3Action \n"));
 	
 	if ((!pEntry) || (!IS_ENTRY_CLIENT(pEntry) && !IS_ENTRY_APCLI(pEntry)))
@@ -1411,7 +1413,7 @@ VOID PeerPairMsg3Action(
 #ifdef APCLI_SUPPORT
 		if (IS_ENTRY_APCLI(pEntry))
 		{
-			UINT				IfIndex = 0;
+
 		
 			IfIndex = pEntry->MatchAPCLITabIdx;
 #ifdef MAC_REPEATER_SUPPORT
@@ -1571,6 +1573,9 @@ VOID PeerPairMsg3Action(
 		IF_DEV_CONFIG_OPMODE_ON_AP(pAd)
 		{				
 #ifdef APCLI_SUPPORT
+			IfIndex = pEntry->MatchAPCLITabIdx;
+			pAd->ApCfg.ApCliTab[IfIndex].ConnectState = APCLI_NOT_TRIGGER_CONNECT;
+			pAd->ApCfg.ApCliTab[IfIndex].FailReason = 0;
 #ifdef APCLI_AUTO_CONNECT_SUPPORT
 			if((pAd->ApCfg.ApCliAutoConnectRunning == TRUE)
 #ifdef MAC_REPEATER_SUPPORT
@@ -2016,6 +2021,11 @@ VOID	PeerGroupMsg1Action(
 	IF_DEV_CONFIG_OPMODE_ON_AP(pAd)
 	{				
 #ifdef APCLI_SUPPORT
+			UINT				IfIndex = 0;
+		
+			IfIndex = pEntry->MatchAPCLITabIdx;
+		pAd->ApCfg.ApCliTab[IfIndex].ConnectState = APCLI_NOT_TRIGGER_CONNECT;
+		pAd->ApCfg.ApCliTab[IfIndex].FailReason = 0;
 #ifdef APCLI_AUTO_CONNECT_SUPPORT
 		if ((pAd->ApCfg.ApCliAutoConnectRunning == TRUE)
 #ifdef MAC_REPEATER_SUPPORT

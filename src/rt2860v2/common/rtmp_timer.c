@@ -147,6 +147,10 @@ BUILD_TIMER_FUNCTION(P2pCliReConnectTimeOut);
 BUILD_TIMER_FUNCTION(ATEPeriodicExec);
 #endif /* RALINK_ATE */
 
+#ifdef PEER_DELBA_TX_ADAPT
+BUILD_TIMER_FUNCTION(PeerDelBATxAdaptTimeOut);
+#endif
+
 #ifdef RTMP_TIMER_TASK_SUPPORT
 static void RtmpTimerQHandle(RTMP_ADAPTER *pAd)
 {

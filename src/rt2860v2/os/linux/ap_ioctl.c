@@ -31,6 +31,11 @@
 #include "rt_os_net.h"
 #include <linux/wireless.h>
 
+extern
+int rt_ioctl_giwscan(struct net_device *dev,
+                        struct iw_request_info *info,
+                        struct iw_point *data, char *extra);
+
 struct iw_priv_args ap_privtab[] = {
 { RTPRIV_IOCTL_SET, 
 /* 1024 --> 1024 + 512 */
@@ -81,21 +86,30 @@ struct iw_priv_args ap_privtab[] = {
   "get_ba_table"},
 { RTPRIV_IOCTL_STATISTICS,
   IW_PRIV_TYPE_CHAR | 1024, IW_PRIV_TYPE_CHAR | 1024,
-  "stat"}
+  "stat"},
+{ RTPRIV_IOCTL_GET_APCLI_CONNSTATUS,
+  IW_PRIV_TYPE_CHAR | 1024, IW_PRIV_TYPE_CHAR | 1024,
+  "Connstatus"}
+};
+
+static const iw_handler rt_ap_handler[]=
+{
+	[(SIOCGIWSCAN-SIOCSIWCOMMIT)] = (iw_handler) rt_ioctl_giwscan,
+//	[(SIOCSIWSCAN-SIOCSIWCOMMIT)] = (iw_handler) rt_ioctl_ap_siwscan,
 };
 
 
-#ifdef CONFIG_APSTA_MIXED_SUPPORT
 const struct iw_handler_def rt28xx_ap_iw_handler_def =
 {
+	.standard = (iw_handler *) rt_ap_handler,
 #define	N(a)	(sizeof (a) / sizeof (a[0]))
+	.num_standard = sizeof(rt_ap_handler) / sizeof(iw_handler),
 	.private_args	= (struct iw_priv_args *) ap_privtab,
 	.num_private_args	= N(ap_privtab),
 #if IW_HANDLER_VERSION >= 7
 	.get_wireless_stats = rt28xx_get_wireless_stats,
 #endif 
 };
-#endif /* CONFIG_APSTA_MIXED_SUPPORT */
 
 
 INT rt28xx_ap_ioctl(
@@ -212,6 +226,8 @@ INT rt28xx_ap_ioctl(
 			wrqin->u.freq.m = Channel; /*pAd->CommonCfg.Channel; */
 			wrqin->u.freq.e = 0;
 			wrqin->u.freq.i = 0;
+			DBGPRINT(RT_DEBUG_TRACE, ("IOCTL::SIOCGIWFREQ:(%d)\n", Channel));
+
 		}
 			break; 
 		case SIOCSIWFREQ: /*set channel/frequency (Hz) */
@@ -238,7 +254,59 @@ INT rt28xx_ap_ioctl(
 		case SIOCSIWRTS:  /*set RTS/CTS threshold (bytes) */
 		case SIOCGIWFRAG:  /*get fragmentation thr (bytes) */
 		case SIOCSIWFRAG:  /*set fragmentation thr (bytes) */
+			Status = RTMP_IO_EOPNOTSUPP;	
+			break;			
 		case SIOCGIWENCODE:  /*get encoding token & mode */
+		{
+			//printk("==> SIOCGIWENCODE\n");
+
+			RT_CMD_STA_IOCTL_SECURITY IoctlSec, *pIoctlSec = &IoctlSec;
+			int max_key_len;
+			struct iw_point *encoding = &wrqin->u.encoding;
+			
+			 max_key_len = encoding->length /*- sizeof(*ext)*/;
+			 if (max_key_len < 0)
+                	 {
+				Status = RTMP_IO_EOPNOTSUPP;
+			 	break;
+			 }
+			
+			 memset(pIoctlSec, 0, sizeof(RT_CMD_STA_IOCTL_SECURITY));
+			 pIoctlSec->KeyIdx = encoding->flags & IW_ENCODE_INDEX;
+			 pIoctlSec->MaxKeyLen = max_key_len;
+
+			if (RTMP_AP_IoctlHandle(pAd, NULL, CMD_RTPRIV_IOCTL_AP_SIOCGIWENCODEEXT, 0,
+                                pIoctlSec, RT_DEV_PRIV_FLAGS_GET(net_dev)) != NDIS_STATUS_SUCCESS)
+        		{
+                		//ext->key_len = 0;
+                		//RT_CMD_STATUS_TRANSLATE(pIoctlSec->Status);
+                		//return pIoctlSec->Status;
+				Status = RTMP_IO_EOPNOTSUPP;
+				break;
+        		}
+
+			encoding->flags = pIoctlSec->KeyIdx;
+			encoding->length = pIoctlSec->length;
+
+			if (pIoctlSec->Alg == RT_CMD_STA_IOCTL_SECURITY_ALG_NONE)
+                		encoding->flags |= IW_ENCODE_ALG_NONE;
+        		else if (pIoctlSec->Alg == RT_CMD_STA_IOCTL_SECURITY_ALG_WEP)
+                		encoding->flags |= IW_ENCODE_ALG_WEP;
+        		else if (pIoctlSec->Alg == RT_CMD_STA_IOCTL_SECURITY_ALG_TKIP)
+                		encoding->flags |= IW_ENCODE_ALG_TKIP;
+        		else if (pIoctlSec->Alg == RT_CMD_STA_IOCTL_SECURITY_ALG_CCMP)
+                		encoding->flags |= IW_ENCODE_ALG_CCMP;
+
+        		if (pIoctlSec->flags & RT_CMD_STA_IOCTL_SECURITY_DISABLED)
+                		encoding->flags |= IW_ENCODE_DISABLED;
+
+			if (pIoctlSec->length && pIoctlSec->pData)
+			{
+				encoding->flags |= IW_ENCODE_ENABLED;
+				memcpy(encoding->pointer, pIoctlSec->pData, encoding->length);
+			}
+		}
+			break;			
 		case SIOCSIWENCODE:  /*set encoding token & mode */
 			Status = RTMP_IO_EOPNOTSUPP;
 			break;
@@ -254,23 +322,96 @@ INT rt28xx_ap_ioctl(
 			}
 			break;
 		case SIOCGIWMODE:  /*get operation mode */
-			wrqin->u.mode = IW_MODE_MASTER;   /*SoftAP always on MASTER mode. */
+			wrqin->u.mode = IW_MODE_INFRA;   /*SoftAP always on INFRA mode. */
+			DBGPRINT(RT_DEBUG_TRACE,("ioctl SIOCGIWMODE=%d\n", wrqin->u.mode));			
 			break;
 		case SIOCSIWAP:  /*set access point MAC addresses */
 		case SIOCSIWMODE:  /*set operation mode */
 		case SIOCGIWSENS:   /*get sensitivity (dBm) */
 		case SIOCSIWSENS:	/*set sensitivity (dBm) */
+			break;	
 		case SIOCGIWPOWER:  /*get Power Management settings */
+		{
+			DBGPRINT(RT_DEBUG_ERROR,("SIOCGIWPOWER\n"));	
+                        break;		
+		}			
 		case SIOCSIWPOWER:  /*set Power Management settings */
+			break;
 		case SIOCGIWTXPOW:  /*get transmit power (dBm) */
+		{
+			//DBGPRINT(RT_DEBUG_ERROR,("SIOCGIWTXPOW\n"));	
+			int len;
+			UINT power;
+	              wrqin->u.txpower.value = 0;              
+                     wrqin->u.txpower.fixed = 1; 
+	              wrqin->u.txpower.disabled = 0; 
+                     wrqin->u.txpower.flags = IW_TXPOW_DBM; 
+
+			RTMP_AP_IoctlHandle(pAd, wrq, CMD_RTPRIV_IOCTL_AP_SIOCGIWTXPOW, 0,
+								&(power), RT_DEV_PRIV_FLAGS_GET(net_dev));		
+
+			wrqin->u.txpower.value = power;
+				//len = copy_to_user(wrqin->u.data.pointer, prange, sizeof(struct iw_range));
+                        break;		
+		}			
 		case SIOCSIWTXPOW:  /*set transmit power (dBm) */
-		/*case SIOCGIWRANGE:	//Get range of parameters */
+			DBGPRINT(RT_DEBUG_ERROR,("SIOCSIWTXPOW\n"));	
+			break;		
+		case SIOCGIWSTATS:  /*get transmit power (dBm) */
+		{
+			DBGPRINT(RT_DEBUG_ERROR,("SIOCGIWSTATS\n"));		
+			struct iw_statistics *pStats;
+			RT_CMD_IW_STATS DrvIwStats, *pDrvIwStats = &DrvIwStats;
+			int len;
+
+			GET_PAD_FROM_NET_DEV(pAd, net_dev);	
+
+
+			pDrvIwStats->priv_flags = RT_DEV_PRIV_FLAGS_GET(net_dev);
+			pDrvIwStats->dev_addr = (PUCHAR)net_dev->dev_addr;
+
+			if (RTMP_DRIVER_IW_STATS_GET(pAd, pDrvIwStats) != NDIS_STATUS_SUCCESS)
+				return NULL;
+
+			pStats = (struct iw_statistics *)(pDrvIwStats->pStats);
+			pStats->status = 0; /* Status - device dependent for now */
+
+
+			pStats->qual.updated = 1;     /* Flags to know if updated */
+			pStats->qual.qual = pDrvIwStats->qual;
+			pStats->qual.level = pDrvIwStats->level;
+			pStats->qual.noise = pDrvIwStats->noise;
+			pStats->discard.nwid = 0;     /* Rx : Wrong nwid/essid */
+			pStats->miss.beacon = 0;      /* Missed beacons/superframe */
+			len = copy_to_user(wrqin->u.data.pointer, pStats, sizeof(struct iw_statistics));
+                        break;		
+		}				
 		case SIOCGIWRETRY:	/*get retry limits and lifetime */
 		case SIOCSIWRETRY:	/*set retry limits and lifetime */
 			Status = RTMP_IO_EOPNOTSUPP;
 			break;
 		case SIOCGIWRANGE:	/*Get range of parameters */
 		    {
+				UINT power;
+				int i,bw,shortGI;
+				UCHAR phymode;
+
+				INT OFDM_RateTable[] ={2,  4,   11,  22, 12, 18,   24,  36, 48, 72, 96, 108,};
+				INT HT20_LongGI[] ={13, 26,   39,  52,  78, 104, 117, 130, 26,  52,  78, 104, 156, 208, 234, 260,};
+				INT HT40_LongGI[] ={27, 54,   81, 108, 162, 216, 243, 270, 54, 108, 162, 216, 324, 432, 486, 540,};
+				INT HT20_ShortGI[] ={14, 29,   43,  57,  87, 115, 130, 144, 29, 59,   87, 115, 173, 230, 260, 288,};
+				INT HT40_ShortGI[] ={30, 60,   90, 120, 180, 240, 270, 300, 60, 120, 180, 240, 360, 480, 540, 600,};
+				//DBGPRINT(RT_DEBUG_ERROR,("SIOCGIWRANGE:\n"));
+
+				RTMP_AP_IoctlHandle(pAd, wrq, CMD_RTPRIV_IOCTL_AP_GET_PHYMODE, 0,
+												&(phymode), RT_DEV_PRIV_FLAGS_GET(net_dev));	
+
+				RTMP_AP_IoctlHandle(pAd, wrq, CMD_RTPRIV_IOCTL_AP_GET_BW, 0,
+												&(bw), RT_DEV_PRIV_FLAGS_GET(net_dev));
+
+				RTMP_AP_IoctlHandle(pAd, wrq, CMD_RTPRIV_IOCTL_AP_GET_SHORTGI, 0,
+												&(shortGI), RT_DEV_PRIV_FLAGS_GET(net_dev));				
+
 /*				struct iw_range range; */
 				struct iw_range *prange = NULL;
 				UINT32 len;
@@ -287,6 +428,8 @@ INT rt28xx_ap_ioctl(
 				prange->we_version_compiled = WIRELESS_EXT;
 				prange->we_version_source = 14;
 
+				 prange->throughput = 27 * 1000 * 1000;
+				 
 				/*
 					what is correct max? This was not
 					documented exactly. At least
@@ -295,7 +438,94 @@ INT rt28xx_ap_ioctl(
 				prange->max_qual.qual = 100;
 				prange->max_qual.level = 0; /* dB */
 				prange->max_qual.noise = 0; /* dB */
-				len = copy_to_user(wrq->u.data.pointer, prange, sizeof(struct iw_range));
+				prange->max_qual.updated = 7; 
+
+				prange->avg_qual.qual = 70;
+				prange->avg_qual.level = 0; 
+				 prange->avg_qual.noise = 0;
+				 prange->avg_qual.updated = 7;
+
+				if (phymode < 5)
+				{
+					prange->num_bitrates = 12;
+					 for (i = 0; i < prange->num_bitrates; i++)
+	                				 prange->bitrate[i] = (OFDM_RateTable[i]) *
+	                     			500000;
+				} 
+#ifdef DOT11_N_SUPPORT				
+				else {
+
+					if (bw == 0)
+					{
+						if (shortGI ==0 )
+						{
+							prange->num_bitrates = sizeof(HT20_LongGI)/sizeof(HT20_LongGI[0]);
+							 for (i = 0; i < prange->num_bitrates; i++)
+			                				 prange->bitrate[i] = (HT20_LongGI[i]) *
+			                     			500000;						
+						} else {
+							prange->num_bitrates = sizeof(HT20_ShortGI)/sizeof(HT20_ShortGI[0]);
+							 for (i = 0; i < prange->num_bitrates; i++)
+			                				 prange->bitrate[i] = (HT20_ShortGI[i]) *
+			                     			500000;						
+						}
+					} else {
+						if (shortGI ==0 )
+						{
+							prange->num_bitrates = sizeof(HT40_LongGI)/sizeof(HT40_LongGI[0]);
+							 for (i = 0; i < prange->num_bitrates; i++)
+			                				 prange->bitrate[i] = (HT40_LongGI[i]) *
+			                     			500000;						
+						} else {
+							prange->num_bitrates = sizeof(HT40_ShortGI)/sizeof(HT40_ShortGI[0]);
+							 for (i = 0; i < prange->num_bitrates; i++)
+			                				 prange->bitrate[i] = (HT40_ShortGI[i]) *
+			                     			500000;						
+						}
+					}
+
+				}
+				
+#endif				
+				   prange->max_rts = 2347;
+				    prange->min_frag = MIN_FRAG_THRESHOLD;
+				prange->max_frag = MAX_FRAG_THRESHOLD;	
+
+				  prange->encoding_size[0] = 5;
+        			 prange->encoding_size[1] = 13;
+         			prange->num_encoding_sizes = 2;
+         			prange->max_encoding_tokens = 4;
+
+				INT bg[] ={2412, 2417, 2422, 2427, 2432, 2437, 2442, 2447, 2452, 2457, 2462, 2467, 2472,2477,2482,2487};
+			        i = 0;
+			        {
+			                 for (i = 1; i <14; i ++) {
+			 
+			                         prange->freq[i-1].i = i;
+			                         prange->freq[i-1].m = bg[i-1] * 100000;
+			                        prange->freq[i-1].e = 1;
+			                 }
+			         }		
+
+					prange->num_channels =13;
+					prange->num_frequency = 13;
+
+				 prange->event_capa[0] = (IW_EVENT_CAPA_K_0 |
+                                 IW_EVENT_CAPA_MASK(SIOCGIWTHRSPY) |
+                                 IW_EVENT_CAPA_MASK(SIOCGIWAP) |
+                                 IW_EVENT_CAPA_MASK(SIOCGIWSCAN));
+        			 prange->event_capa[1] = IW_EVENT_CAPA_K_1;
+
+				prange->enc_capa = IW_ENC_CAPA_WPA | IW_ENC_CAPA_WPA2 |
+                 			IW_ENC_CAPA_CIPHER_TKIP | IW_ENC_CAPA_CIPHER_CCMP;
+ 
+         			prange->scan_capa = IW_SCAN_CAPA_ESSID | IW_SCAN_CAPA_TYPE;
+
+ 				prange->num_txpower = 2;
+     				prange->txpower_capa = IW_TXPOW_DBM|IW_TXPOW_RANGE;
+				prange->txpower[0] = -20;
+				prange->txpower[0] = -90;	
+				len = copy_to_user(wrqin->u.data.pointer, prange, sizeof(struct iw_range));
 				os_free_mem(NULL, prange);
 		    }
 		    break;
@@ -385,6 +615,11 @@ INT rt28xx_ap_ioctl(
 			RTMP_AP_IoctlHandle(pAd, wrq, CMD_RTPRIV_IOCTL_STATISTICS, 0, NULL, 0);
 			break;
 
+		case RTPRIV_IOCTL_GET_APCLI_CONNSTATUS:
+			printk("-->RTPRIV_IOCTL_GET_APCLI_CONNSTATUS\n");
+			RTMP_AP_IoctlHandle(pAd, wrq, CMD_RTPRIV_IOCTL_CONNSTATUS, 0, NULL, 0);
+			break;
+			
 #ifdef WSC_AP_SUPPORT
 		case RTPRIV_IOCTL_WSC_PROFILE:
 			RTMP_AP_IoctlHandle(pAd, wrq, CMD_RTPRIV_IOCTL_WSC_PROFILE, 0, NULL, 0);
@@ -414,7 +649,16 @@ INT rt28xx_ap_ioctl(
 			break;
 #endif /* RTMP_RF_RW_SUPPORT */
 #endif /* DBG */
+		case SIOCSIWSCAN:
+			printk("====> SIOCSIWSCAN: %d\n", RT_DEV_PRIV_FLAGS_GET(net_dev));
+			if (RTMP_AP_IoctlHandle(pAd, wrq, CMD_RTPRIV_IOCTL_AP_SIOCSIWSCAN, 0, 
+			          net_dev, pIoctlConfig->priv_flags) != NDIS_STATUS_SUCCESS)
+                        {
+                                Status = RTMP_IO_EOPNOTSUPP;
+                                break;
+                        }
 
+			break;
 		default:
 /*			DBGPRINT(RT_DEBUG_ERROR, ("IOCTL::unknown IOCTL's cmd = 0x%08x\n", cmd)); */
 			Status = RTMP_IO_EOPNOTSUPP;

@@ -1014,6 +1014,7 @@ BOOLEAN RTMP_FillTxBlkInfo(
 		{
 			TX_BLK_SET_FLAG(pTxBlk, fTX_bMoreData);
 		}
+		pTxBlk->pMbss = &pAd->ApCfg.MBSSID[pTxBlk->apidx];
 	}
 	else
 	{
@@ -2031,6 +2032,12 @@ VOID RTMPWriteTxWI_Data(
 #endif /* INF_AMAZON_SE */	
 
 #ifdef MCS_LUT_SUPPORT
+	if (RTMP_GET_PACKET_LOWRATE(pTxBlk->pPacket) ||
+		pTxBlk->TxFrameType == TX_MCAST_FRAME)
+	{
+		pTxWI->TXLUT = 0;
+	}
+	else
 	pTxWI->TXLUT = pAd->bUseHwTxLURate;
 #endif /* MCS_LUT_SUPPORT */
 
@@ -2194,6 +2201,12 @@ VOID RTMPWriteTxWI_Cache(
 	pTxWI->MPDUtotalByteCount = pTxBlk->MpduHeaderLen + pTxBlk->SrcBufLen;
 
 #ifdef MCS_LUT_SUPPORT
+	if (RTMP_GET_PACKET_LOWRATE(pTxBlk->pPacket) ||
+		pTxBlk->TxFrameType == TX_MCAST_FRAME)
+	{
+		pTxWI->TXLUT = 0;
+	}
+	else
 	pTxWI->TXLUT = pAd->bUseHwTxLURate;
 #endif /* MCS_LUT_SUPPORT */
 	
@@ -2541,6 +2554,9 @@ MAC_TABLE_ENTRY *MacTableLookup(
 {
 	ULONG HashIdx;
 	MAC_TABLE_ENTRY *pEntry = NULL;
+
+    //add protect
+    NdisAcquireSpinLock(&pAd->MacTabLock);
 	
 	HashIdx = MAC_ADDR_HASH_INDEX(pAddr);
 	pEntry = pAd->MacTab.Hash[HashIdx];
@@ -2554,6 +2570,9 @@ MAC_TABLE_ENTRY *MacTableLookup(
 		else
 			pEntry = pEntry->pNext;
 	}
+
+    //add protect
+     NdisReleaseSpinLock(&pAd->MacTabLock);
 
 	return pEntry;
 }
@@ -3012,6 +3031,9 @@ MAC_TABLE_ENTRY *MacTableInsertEntry(
 			/* Add this entry into ASIC RX WCID search table */
 			RTMP_STA_ENTRY_ADD(pAd, pEntry);
 
+#ifdef PEER_DELBA_TX_ADAPT
+			Peer_DelBA_Tx_Adapt_Init(pAd, pEntry);
+#endif /* PEER_DELBA_TX_ADAPT */
 
 #ifdef CONFIG_AP_SUPPORT
 #ifdef P2P_SUPPORT
@@ -3043,6 +3065,10 @@ MAC_TABLE_ENTRY *MacTableInsertEntry(
 #ifdef IWSC_SUPPORT
 		PWSC_PEER_ENTRY pWscPeerEntry = NULL;
 #endif /* IWSC_SUPPORT */
+
+        #if 1 //add initial
+        pEntry->pNext=NULL;
+        #endif
 
 		HashIdx = MAC_ADDR_HASH_INDEX(pAddr);
 		if (pAd->MacTab.Hash[HashIdx] == NULL)

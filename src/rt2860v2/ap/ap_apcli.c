@@ -430,8 +430,11 @@ BOOLEAN ApCliLinkUp(
 						pMacEntry->PortSecured = WPA_802_1X_PORT_NOT_SECURED;
 				else
 #endif /*APCLI_WPA_SUPPLICANT_SUPPORT*/
-
-				pMacEntry->PortSecured = WPA_802_1X_PORT_SECURED;
+				{
+					pMacEntry->PortSecured = WPA_802_1X_PORT_SECURED;
+					pApCliEntry->ConnectState = APCLI_NOT_TRIGGER_CONNECT;
+					pApCliEntry->FailReason = 0;
+				}
 #ifdef MAC_REPEATER_SUPPORT
 				if (CliIdx != 0xFF)
 					pAd->ApCfg.ApCliTab[ifIndex].RepeaterCli[CliIdx].CliConnectState = 2;
